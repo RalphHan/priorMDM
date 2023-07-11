@@ -25,7 +25,7 @@ class npy2obj:
 
         if self.nfeats == 3:
             print(f'Running SMPLify For sample [{sample_idx}], repetition [{rep_idx}], it may take a few minutes.')
-            motion_tensor, opt_dict = self.j2s.joint2smpl(self.motions['motion'][self.absl_idx].transpose(2, 0, 1))  # [nframes, njoints, 3]
+            motion_tensor, opt_dict = self.j2s.joint2smpl(self.motions['motion'][self.absl_idx].permute(2, 0, 1))  # [nframes, njoints, 3]
             self.motions['motion'] = motion_tensor.cpu().numpy()
         elif self.nfeats == 6:
             self.motions['motion'] = self.motions['motion'][[self.absl_idx]]
