@@ -8,6 +8,7 @@ from visualize.joints2smpl.src.smplify import SMPLify3D
 from tqdm import tqdm
 import utils.rotation_conversions as geometry
 import argparse
+from my_smpl import MySMPL
 
 
 class joints2smpl:
@@ -21,26 +22,27 @@ class joints2smpl:
         self.num_smplify_iters = 150
         self.fix_foot = False
         print(config.SMPL_MODEL_DIR)
-        smplmodel = smplx.create(config.SMPL_MODEL_DIR,
-                                 model_type="smpl", gender="neutral", ext="pkl",
-                                 batch_size=self.batch_size).to(self.device)
+        model_path = os.path.join(config.SMPL_MODEL_DIR, "smpl")
+        smplmodel = MySMPL(model_path, gender="neutral", ext="pkl",
+                           batch_size=self.batch_size).to(self.device)
 
         # ## --- load the mean pose as original ----
         smpl_mean_file = config.SMPL_MEAN_FILE
 
         file = h5py.File(smpl_mean_file, 'r')
-        self.init_mean_pose = torch.from_numpy(file['pose'][:]).unsqueeze(0).repeat(self.batch_size, 1).float().to(self.device)
-        self.init_mean_shape = torch.from_numpy(file['shape'][:]).unsqueeze(0).repeat(self.batch_size, 1).float().to(self.device)
+        self.init_mean_pose = torch.from_numpy(file['pose'][:]).unsqueeze(0).repeat(self.batch_size, 1).float().to(
+            self.device)
+        self.init_mean_shape = torch.from_numpy(file['shape'][:]).unsqueeze(0).repeat(self.batch_size, 1).float().to(
+            self.device)
         self.cam_trans_zero = torch.Tensor([0.0, 0.0, 0.0]).unsqueeze(0).to(self.device)
         #
 
         # # #-------------initialize SMPLify
         self.smplify = SMPLify3D(smplxmodel=smplmodel,
-                            batch_size=self.batch_size,
-                            joints_category=self.joint_category,
-                            num_iters=self.num_smplify_iters,
-                            device=self.device)
-
+                                 batch_size=self.batch_size,
+                                 joints_category=self.joint_category,
+                                 num_iters=self.num_smplify_iters,
+                                 device=self.device)
 
     def npy2smpl(self, npy_path):
         out_path = npy_path.replace('.npy', '_rot.npy')
@@ -58,10 +60,8 @@ class joints2smpl:
         np.save(out_path, motions)
         exit()
 
-
-
     def joint2smpl(self, input_joints, init_params=None):
-        _smplify = self.smplify # if init_params is None else self.smplify_fast
+        _smplify = self.smplify  # if init_params is None else self.smplify_fast
         pred_pose = torch.zeros(self.batch_size, 72).to(self.device)
         pred_betas = torch.zeros(self.batch_size, 10).to(self.device)
         pred_cam_t = torch.zeros(self.batch_size, 3).to(self.device)
@@ -69,7 +69,6 @@ class joints2smpl:
 
         # run the whole seqs
         num_seqs = input_joints.shape[0]
-
 
         # joints3d = input_joints[idx]  # *1.2 #scale problem [check first]
         keypoints_3d = torch.Tensor(input_joints).to(self.device).float()
@@ -96,7 +95,7 @@ class joints2smpl:
             print("Such category not settle down!")
 
         new_opt_vertices, new_opt_joints, new_opt_pose, new_opt_betas, \
-        new_opt_cam_t, new_opt_joint_loss = _smplify(
+            new_opt_cam_t, new_opt_joint_loss = _smplify(
             pred_pose.detach(),
             pred_betas.detach(),
             pred_cam_t.detach(),
@@ -111,7 +110,8 @@ class joints2smpl:
         root_loc = torch.cat([root_loc, torch.zeros_like(root_loc)], dim=-1).unsqueeze(1)  # [bs, 1, 6]
         thetas = torch.cat([thetas, root_loc], dim=1).unsqueeze(0).permute(0, 2, 3, 1)  # [1, 25, 6, 196]
 
-        return thetas.clone().detach(), {'pose': new_opt_joints[0, :24].flatten().clone().detach(), 'betas': new_opt_betas.clone().detach(), 'cam': new_opt_cam_t.clone().detach()}
+        return thetas.clone().detach(), {'pose': new_opt_joints[0, :24].flatten().clone().detach(),
+                                         'betas': new_opt_betas.clone().detach(), 'cam': new_opt_cam_t.clone().detach()}
 
 
 if __name__ == '__main__':

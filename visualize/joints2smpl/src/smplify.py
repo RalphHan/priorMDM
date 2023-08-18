@@ -12,6 +12,7 @@ from customloss import (camera_fitting_loss,
                         )
 from prior import MaxMixturePrior
 from visualize.joints2smpl.src import config
+from my_smpl import MySMPL
 
 
 
@@ -171,10 +172,6 @@ class SMPLify3D():
                                             body_pose=body_pose,
                                             betas=betas)
                     model_joints = smpl_output.joints
-                    # print('model_joints', model_joints.shape)
-                    # print('camera_translation', camera_translation.shape)
-                    # print('init_cam_t', init_cam_t.shape)
-                    # print('j3d', j3d.shape)
                     loss = camera_fitting_loss_3d(model_joints, camera_translation,
                                                   init_cam_t, j3d, self.joints_category)
                     loss.backward()
@@ -221,7 +218,6 @@ class SMPLify3D():
                                             body_pose=body_pose,
                                             betas=betas)
                     model_joints = smpl_output.joints
-                    model_vertices = smpl_output.vertices
 
                     loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index], camera_translation,
                                                 j3d[:, self.corr_index], self.pose_prior,
@@ -229,7 +225,7 @@ class SMPLify3D():
                                                 joint_loss_weight=600.0,
                                                 pose_preserve_weight=5.0,
                                                 use_collision=self.use_collision, 
-                                                model_vertices=model_vertices, model_faces=self.model_faces,
+                                                model_vertices=None, model_faces=self.model_faces,
                                                 search_tree=search_tree, pen_distance=pen_distance, filter_faces=filter_faces)
                     loss.backward()
                     return loss
@@ -243,14 +239,13 @@ class SMPLify3D():
                                         body_pose=body_pose,
                                         betas=betas)
                 model_joints = smpl_output.joints
-                model_vertices = smpl_output.vertices
 
                 loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index], camera_translation,
                                             j3d[:, self.corr_index], self.pose_prior,
                                             joints3d_conf=conf_3d,
                                             joint_loss_weight=600.0,
                                             use_collision=self.use_collision, 
-                                            model_vertices=model_vertices, model_faces=self.model_faces,
+                                            model_vertices=None, model_faces=self.model_faces,
                                             search_tree=search_tree,  pen_distance=pen_distance,  filter_faces=filter_faces)
                 body_optimizer.zero_grad()
                 loss.backward()
@@ -258,7 +253,7 @@ class SMPLify3D():
 
         # Get final loss value
         with torch.no_grad():
-            smpl_output = self.smpl(global_orient=global_orient,
+            smpl_output = super(MySMPL, self.smpl).forward(global_orient=global_orient,
                                     body_pose=body_pose,
                                     betas=betas, return_full_pose=True)
             model_joints = smpl_output.joints
