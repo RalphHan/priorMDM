@@ -1,4 +1,4 @@
-docker run -it \
+docker run -itd \
 --gpus '"device=0"' \
 -v `pwd`:/PriorMDM \
 --restart always \
