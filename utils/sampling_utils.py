@@ -61,6 +61,7 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
         transition[ii,
         model_kwargs['y']['lengths'][ii] - args.handshake_size: model_kwargs['y']['lengths'][ii]] = 1.0
     model_kwargs['y']['is_transition'] = transition
+    all_text = model_kwargs['y']['text']
 
     # Unfolding - orig
     sample = sample_fn(
@@ -127,8 +128,7 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
         transition = torch.tile(transition.unsqueeze(0), dims=(bs-1, 1))
         model_kwargs['y']['is_transition'] = transition
         model_kwargs['y']['uncond'] = 1.0
-        last_text = model_kwargs['y']['text'][-1]
-        model_kwargs['y']['text'] = model_kwargs['y']['text'][:bs-1]
+        model_kwargs['y']['text'] = all_text[:bs-1]
         sample_fn = diffusion.p_sample_loop  # double take sample function
         n_frames = new_sample_seq_len
         orig_lens = deepcopy(model_kwargs['y']['lengths'])
@@ -187,7 +187,7 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
         model_kwargs['y'].pop('inpainting_mask')
         model_kwargs['y'].pop('uncond')
         model_kwargs['y']['is_transition'] = deepcopy(transition_orig)
-        model_kwargs['y']['text'].append(last_text)
+        model_kwargs['y']['text'] = all_text
 
     return samples_per_rep_list, samples_type
 

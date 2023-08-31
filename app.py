@@ -77,7 +77,7 @@ def prompt2video(prompt,args, model, diffusion, data):
 
         model_kwargs['y'] = {key: val.to(dist_util.dev()) if torch.is_tensor(val) else val for key, val in
                              model_kwargs['y'].items()}
-
+        all_model_text = model_kwargs['y']['text']
         if not args.sample_gt:
             sample_fn = diffusion.p_sample_loop
             sample = sample_fn(
@@ -121,8 +121,8 @@ def prompt2video(prompt,args, model, diffusion, data):
                 sample1 += diff_trans.view(-1, 1, 3, 1).cpu().numpy()
 
         text_key = 'text'
-        all_text += model_kwargs['y'][text_key]
-        all_captions += model_kwargs['y'][text_key]
+        all_text += all_model_text
+        all_captions += all_model_text
 
         all_motions.append(sample.cpu().numpy())
         all_lengths.append(model_kwargs['y']['lengths'].cpu().numpy())

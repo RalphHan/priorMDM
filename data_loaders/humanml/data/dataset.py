@@ -392,7 +392,7 @@ class Text2MotionDatasetV2(data.Dataset):
         return word_embeddings, pos_one_hots, caption, sent_len, motion, m_length, '_'.join(tokens), []
 
 
-
+import pickle
 '''For use of training text motion matching model, and evaluations'''
 class PW3D_Text2MotionDatasetV2(data.Dataset):
     def __init__(self, opt, mean, std, splits, w_vectorizer, **kwargs):
@@ -405,39 +405,36 @@ class PW3D_Text2MotionDatasetV2(data.Dataset):
         self.canon_relevant_entries = [0, 2, 6, 8]
 
         data_dict = {}
-        base_dir = './dataset/3dpw/new_joint_vecs'
-        splits = splits.split(',')
-        group_path = [[pjoin(base_dir, s, f) for f in os.listdir(pjoin(base_dir, s)) if (f.endswith('_p0.npy') or f.endswith('_p0_M.npy'))] for s in splits]
-        id_list = list(itertools.chain.from_iterable(group_path))
+        base_dir = './dataset/inter-human/new_joint_vecs'
+        text_dir = './dataset/inter-human/annots'
+        id_list = os.listdir(base_dir)
         new_name_list = []
         length_list = []
         for name in tqdm(id_list):
-            name0 = name
-            name1 = name.replace('_p0', '_p1')
-            motion0 = np.load(name0)
-            motion1 = np.load(name1)
-            def get_canon(_name):
-                _canon = np.load(_name.replace('new_joint_vecs', 'canon_data'))[self.canon_relevant_entries] / 10.
-                return np.concatenate((_canon, np.zeros(self.opt.dim_pose-len(self.canon_relevant_entries))))
-            canon0 = get_canon(name0)
-            canon1 = get_canon(name1)
-            if not 'test' in splits:  # test is not yet annotated
-                with open(name0.replace('new_joint_vecs', 'text').replace('p0_M', 'p0').replace('.npy', '.txt'), 'r') as fr:
+            try:
+                with open(os.path.join(text_dir, name.replace('.pkl', '.txt')), 'r') as fr:
                     texts = [t.strip() for t in fr.readlines()]
-            else:
-                texts = [''] * 5
-            assert len(texts) == 5
+            except:
+                continue
+            assert len(texts) == 3
+            with open(os.path.join(base_dir, name), 'rb') as fr:
+                motion=pickle.load(fr)
+            motion0 = motion["person1"]
+            motion1 = motion["person2"]
+            if len(motion0) < self.min_motion_len:
+                continue
+            cannon=np.zeros_like(motion0[0])
+            canon0 = cannon
+            canon1 = cannon
             text_data = [{'caption': texts, 'tokens':['sos/OTHER', 'eos/OTHER']}]  # FIXME - parse tokens
-            new_name = os.path.basename(name).replace('.npy', '')
+            new_name = name.replace('.pkl', '')
             new_name_list.append(new_name)
             assert len(motion0) == len(motion1)
             length_list.append(len(motion0))
-            # print('canon0', canon0)
-            # print('canon1', canon1)
             data_dict[new_name] = {'motion0': motion0, 'motion1': motion1,
                                'length0': len(motion0), 'length1': len(motion1),
                                'text': text_data, 'canon0': canon0, 'canon1': canon1,}
-
+        print("hhhhhh:",len(data_dict))
         # replicate data for beter utilization
         n_replications = 1000
         rep_data_dict = {}
@@ -499,7 +496,7 @@ class PW3D_Text2MotionDatasetV2(data.Dataset):
             m_length = 80
         elif self.opt.load_mode == 'text':
             m_length = random.randint(self.min_motion_len, min(self.max_motion_length, orig_length))
-        offset = random.randint(0, orig_length-m_length-1)
+        offset = random.randint(0, orig_length-m_length)
         motion = motion[offset:offset+m_length]
         other_motion = other_motion[offset:offset+m_length]
 
@@ -1078,14 +1075,18 @@ class HumanML3D(data.Dataset):
         self.opt = opt
         print('Loading dataset %s ...' % opt.dataset_name)
 
-        if load_mode == 'gt':
-            # used by T2M models (including evaluators)
-            self.mean = np.load(pjoin(opt.meta_dir, f'{opt.dataset_name}_mean.npy'))
-            self.std = np.load(pjoin(opt.meta_dir, f'{opt.dataset_name}_std.npy'))
-        elif load_mode in ['train', 'eval', 'text_only', 'prefix', 'text']:
-            # used by our models
-            self.mean = np.load(pjoin(opt.data_root, 'Mean.npy'))
-            self.std = np.load(pjoin(opt.data_root, 'Std.npy'))
+        if opt.dataset_type == 'pw3d':
+            self.mean = np.load(pjoin("./dataset/inter-human/", 'Mean.npy'))
+            self.std = np.load(pjoin("./dataset/inter-human/", 'Std.npy'))
+        else:
+            if load_mode == 'gt':
+                # used by T2M models (including evaluators)
+                self.mean = np.load(pjoin(opt.meta_dir, f'{opt.dataset_name}_mean.npy'))
+                self.std = np.load(pjoin(opt.meta_dir, f'{opt.dataset_name}_std.npy'))
+            elif load_mode in ['train', 'eval', 'text_only', 'prefix', 'text']:
+                # used by our models
+                self.mean = np.load(pjoin(opt.data_root, 'Mean.npy'))
+                self.std = np.load(pjoin(opt.data_root, 'Std.npy'))
 
         if load_mode == 'eval':
             # used by T2M models (including evaluators)

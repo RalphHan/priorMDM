@@ -15,6 +15,7 @@ class ComMDM(MDM):
                          ablation, activation, legacy, data_rep, dataset, clip_dim,
                          arch, emb_trans_dec, clip_version, **kargs)
         self.is_multi = True
+        args.predict_6dof = False
         self.args = args
 
         self.multi_person = MultiPersonBlock(arch=self.args.multi_arch,
@@ -60,7 +61,11 @@ class ComMDM(MDM):
         force_mask = y.get('uncond', False)
         force_no_com = y.get('no_com', False)  # FIXME - note that this feature not working for com_only - which is ok
         if 'text' in self.cond_mode:
-            enc_text = self.encode_text(y['text'])
+            if 'text' in y:
+                text_embed = self.encode_text(y['text'])
+                del y['text']
+                y['text_embed'] = text_embed
+            enc_text = y["text_embed"]
             emb += self.embed_text(self.mask_cond(enc_text, force_mask=force_mask))
         if 'action' in self.cond_mode:
             action_emb = self.embed_action(y['action'])
@@ -82,6 +87,8 @@ class ComMDM(MDM):
         other_canon = canon_other if self.args.predict_6dof else None
         delta_x, canon_out = self.multi_person(cur=mid, other=mid_other, cur_canon=cur_canon,
                                                other_canon=other_canon)
+        if not self.args.predict_6dof:
+            canon_out = canon
         if force_no_com:
             output = self.seqTransEncoder(xseq)[1:]  # [seqlen, bs, d]
         else:
@@ -96,6 +103,7 @@ class ComMDM(MDM):
                 output = mid[1:]
 
         output = self.output_process(output)  # [bs, njoints, nfeats, nframes]
+
         output = torch.cat((canon_out, output), dim=-1)
         return output
 

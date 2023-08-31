@@ -32,7 +32,7 @@ def load_model_wo_clip(model, state_dict):
         missing_keys.remove('t_pos_encoder.pe')
     if 't_pos_encoder.pe' in unexpected_keys:
         unexpected_keys.remove('t_pos_encoder.pe')
-    assert len(unexpected_keys) == 0
+    # assert len(unexpected_keys) == 0
     assert all([k.startswith('clip_model.') for k in missing_keys])
 
 def load_pretrained_mdm(model, state_dict):
