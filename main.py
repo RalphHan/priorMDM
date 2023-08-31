@@ -134,6 +134,7 @@ async def mld_angle(prompt: str, do_translation: bool = True):
                 messages=[{"role": "system",
                            "content": "translate to english without any explanation. If it's already in english, just repeat it."},
                           {"role": "user", "content": prompt}],
+                timeout=10,
             )["choices"][0]["message"]["content"]
         except:
             pass
