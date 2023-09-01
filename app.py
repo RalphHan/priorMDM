@@ -30,7 +30,7 @@ def load_dataset(args, max_frames, n_frames):
 
 def init():
     print(f"generating samples")
-    sys.argv.extend(["--model_path", "./save/my_pw3d_text/model000607744.pt"])
+    sys.argv.extend(["--model_path", "./save/my_pw3d_text/model000500000.pt"])
     args = generate_multi_args()
     print(args)
     fixseed(args.seed)
@@ -93,10 +93,11 @@ def prompt2video(prompt,args, model, diffusion, data):
     if model.data_rep == 'hml_vec':
         n_joints = 22 if sample.shape[1] == 263 else 21
         sample = data.dataset.t2m_dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()[0,0]
+        sample1 = data.dataset.t2m_dataset.inv_transform(sample1.cpu().permute(0, 2, 3, 1)).float()[0, 0]
+        vec=(sample1[...,:3]-sample[...,:3])
+        sample1[...,:3]=sample[...,:3]+torch.tanh(vec)
         sample = recover_from_ric2(sample, n_joints).numpy()
-        if sample1 is not None:
-            sample1 = data.dataset.t2m_dataset.inv_transform(sample1.cpu().permute(0, 2, 3, 1)).float()[0,0]
-            sample1 = recover_from_ric2(sample1, n_joints).numpy()
+        sample1 = recover_from_ric2(sample1, n_joints).numpy()
 
     os.makedirs(out_path)
 
@@ -113,7 +114,7 @@ def prompt2video(prompt,args, model, diffusion, data):
 args, model, diffusion, data = init()
 demo = gr.Interface(
     lambda prompt: prompt2video(prompt, args, model, diffusion, data),
-    [gr.Textbox("A Capoeira practice. One is kicking and the other is avoiding the kick.")],
+    [gr.Textbox("the first person wraps both arms around the other person's neck.")],
     [gr.Video(format="mp4",autoplay=True)],
 )
 demo.launch(server_name='0.0.0.0',server_port=7861)
