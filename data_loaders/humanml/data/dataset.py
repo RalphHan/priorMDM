@@ -1075,7 +1075,7 @@ class HumanML3D(data.Dataset):
         self.opt = opt
         print('Loading dataset %s ...' % opt.dataset_name)
 
-        if opt.dataset_type == 'pw3d':
+        if hasattr(opt, 'dataset_type') and opt.dataset_type == 'pw3d':
             self.mean = np.load(pjoin(f"./dataset/inter-human{'' if split!='validation' else '-test'}/", 'Mean.npy'))
             self.std = np.load(pjoin(f"./dataset/inter-human{'' if split!='validation' else '-test'}/", 'Std.npy'))
         else:
