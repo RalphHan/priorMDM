@@ -405,8 +405,8 @@ class PW3D_Text2MotionDatasetV2(data.Dataset):
         self.canon_relevant_entries = [0, 2, 6, 8]
 
         data_dict = {}
-        base_dir = './dataset/inter-human/new_joint_vecs'
-        text_dir = './dataset/inter-human/annots'
+        base_dir = f"./dataset/inter-human{'' if splits!='validation' else '-test'}/new_joint_vecs"
+        text_dir = f"./dataset/inter-human{'' if splits!='validation' else '-test'}/annots"
         id_list = os.listdir(base_dir)
         new_name_list = []
         length_list = []
@@ -421,7 +421,7 @@ class PW3D_Text2MotionDatasetV2(data.Dataset):
                 motion=pickle.load(fr)
             motion0 = motion["person1"]
             motion1 = motion["person2"]
-            if len(motion0) < self.min_motion_len:
+            if splits!='validation' and len(motion0) < self.min_motion_len:
                 continue
             cannon=np.zeros_like(motion0[0])
             canon0 = cannon
@@ -1076,8 +1076,8 @@ class HumanML3D(data.Dataset):
         print('Loading dataset %s ...' % opt.dataset_name)
 
         if opt.dataset_type == 'pw3d':
-            self.mean = np.load(pjoin("./dataset/inter-human/", 'Mean.npy'))
-            self.std = np.load(pjoin("./dataset/inter-human/", 'Std.npy'))
+            self.mean = np.load(pjoin(f"./dataset/inter-human{'' if split!='validation' else '-test'}/", 'Mean.npy'))
+            self.std = np.load(pjoin(f"./dataset/inter-human{'' if split!='validation' else '-test'}/", 'Std.npy'))
         else:
             if load_mode == 'gt':
                 # used by T2M models (including evaluators)

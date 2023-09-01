@@ -411,6 +411,19 @@ def recover_rot(data):
     cont6d_params = torch.cat([cont6d_params, r_pos_pad], dim=-2)
     return cont6d_params
 
+def recover_from_ric2(data, joints_num):
+    r_pos = data[..., :3]
+    positions = data[..., 4:(joints_num - 1) * 3 + 4]
+    positions = positions.view(positions.shape[:-1] + (-1, 3))
+
+    '''Add root XZ to joints'''
+    positions[..., 0] += r_pos[..., 0:1]
+    positions[..., 2] += r_pos[..., 2:3]
+
+    '''Concate root and joints'''
+    positions = torch.cat([r_pos.unsqueeze(-2), positions], dim=-2)
+
+    return positions
 
 def recover_from_ric(data, joints_num):
     r_rot_quat, r_pos = recover_root_rot_pos(data)
