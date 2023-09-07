@@ -117,6 +117,13 @@ def prompt2motion(prompt, args, model, diffusion, data, prior=None, do_refine=Fa
     sample = data.dataset.t2m_dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
     sample = recover_from_ric(sample, n_joints)
     sample = sample.view(-1, *sample.shape[2:])[0].cpu().numpy()
+
+    vec1 = np.cross(sample[:, 14] - sample[:, 12], sample[:, 13] - sample[:, 12])
+    vec2 = sample[:, 15] - sample[:, 12]
+    cosine = (vec1 * vec2).sum(-1) / (np.linalg.norm(vec1, axis=-1) * np.linalg.norm(vec2, axis=-1) + 1e-7)
+    if (sample[:, 9, 1] > sample[:, 0, 1]).sum() / sample.shape[0] > 0.85 \
+            and (cosine > -0.2).sum() / sample.shape[0] < 0.5:
+        sample[..., 0] = -sample[..., 0]
     return sample
 
 
@@ -136,7 +143,7 @@ def translation(prompt):
 
 def search(prompt):
     ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/", params={"query": prompt, "max_num": 1}).json()
-    motion_id = ret[0]["motion_id"]
+    motion_id = ret[0]["motion_id"].strip('M')
     motion = np.load(f"database/{motion_id}.npy")
     return motion
 
