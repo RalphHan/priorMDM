@@ -1,3 +1,4 @@
+import random
 import dotenv
 dotenv.load_dotenv()
 import openai, os
@@ -18,7 +19,7 @@ from data_loaders.get_data import get_dataset_loader
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
 from utils.sampling_utils import unfold_sample_arb_len, single_take_arb_len
 from visualize import Joints2SMPL
-
+import requests
 
 
 def load_dataset(args, n_frames):
@@ -55,18 +56,18 @@ def calc_frame_colors(handshake_size, blend_size, step_sizes, lengths):
                         ['purple'] * (handshake_size // 2)
     return frame_colors
 
+
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"],
                    allow_headers=["*"])
 
 server_data = {}
 
+
 @app.on_event('startup')
 def init_data():
     old_argv = sys.argv
-    sys.argv = [old_argv[0]] + ["--model_path", "./save/my_humanml_trans_enc_512/model000200000.pt",
-                     "--handshake_size", "20",
-                     "--blend_len", "10"]
+    sys.argv = [old_argv[0]] + ["--model_path", "./save/my_humanml_trans_enc_512/model000200000.pt"]
     args = generate_args()
     sys.argv = old_argv
     fixseed(args.seed)
@@ -85,27 +86,41 @@ def init_data():
     server_data["j2s"] = Joints2SMPL(device="cuda")
     return server_data
 
-def prompt2motion(prompt, args, model, diffusion, data):
+
+def prompt2motion(prompt, args, model, diffusion, data, prior=None, do_refine=False):
+    n_frames = args.n_frames
+    if prior is not None:
+        if not do_refine:
+            n_frames = prior.shape[0]
+        else:
+            n_frames = min(n_frames, prior.shape[0])
+        st_frame = random.randint(0, prior.shape[0] - n_frames)
+        prior = prior[st_frame:st_frame + n_frames]
+        prior = (prior - data.dataset.mean) / data.dataset.std
+        prior = prior.transpose(1, 0)[None, :, None]
+        prior = torch.tensor(prior, dtype=torch.float32).to(dist_util.dev())
+    elif do_refine:
+        raise
     model_kwargs = {'y': {
-        'mask': torch.ones((1, 1, 1, args.n_frames)), #196 is humanml max frames number
-        'lengths': torch.tensor([args.n_frames]),
+        'mask': torch.ones((1, 1, 1, n_frames)),  # 196 is humanml max frames number
+        'lengths': torch.tensor([n_frames]),
         'text': [prompt],
         'tokens': [''],
-        'scale': torch.ones(1)*2.5
+        'scale': torch.ones(1) * (args.guidance_param if not do_refine else args.guidance_param*0.5)
     }}
-    if args.guidance_param != 1:
-        model_kwargs['y']['scale'] = torch.ones(args.batch_size, device=dist_util.dev()) * args.guidance_param
-    model_kwargs['y'] = {key: val.to(dist_util.dev()) if torch.is_tensor(val) else val for key, val in model_kwargs['y'].items()}
-    sample = single_take_arb_len(args, diffusion, model, model_kwargs, model_kwargs['y']['lengths'][0])
-    sample = unfold_sample_arb_len(sample, args.handshake_size, [args.n_frames], args.n_frames, model_kwargs)
+    model_kwargs['y'] = {key: val.to(dist_util.dev()) if torch.is_tensor(val) else val for key, val in
+                         model_kwargs['y'].items()}
+    sample = single_take_arb_len(args, diffusion, model, model_kwargs, model_kwargs['y']['lengths'][0], prior=prior,
+                                 do_refine=do_refine)
+    sample = unfold_sample_arb_len(sample, args.handshake_size, [n_frames], n_frames, model_kwargs)
     n_joints = 22
     sample = data.dataset.t2m_dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
     sample = recover_from_ric(sample, n_joints)
     sample = sample.view(-1, *sample.shape[2:])[0].cpu().numpy()
     return sample
 
-@app.get("/mld_pos/")
-async def mld_pos(prompt: str):
+
+def translation(prompt):
     try:
         prompt = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -116,7 +131,24 @@ async def mld_pos(prompt: str):
         )["choices"][0]["message"]["content"]
     except:
         pass
-    joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"], server_data["data"])
+    return prompt
+
+
+def search(prompt):
+    ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/", params={"query": prompt, "max_num": 1}).json()
+    motion_id = ret[0]["motion_id"]
+    motion = np.load(f"database/{motion_id}.npy")
+    return motion
+
+
+@app.get("/position/")
+async def position(prompt: str, do_translation: bool = True, do_search: bool = True, do_refine: bool = True):
+    print(do_translation, do_search, do_refine)
+    if do_translation:
+        prompt = translation(prompt)
+    prior = search(prompt) if do_search else None
+    joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
+                           server_data["data"], prior=prior, do_refine=do_refine)
     return {"positions": binascii.b2a_base64(joints.flatten().astype(np.float32).tobytes()).decode("utf-8"),
             "dtype": "float32",
             "fps": server_data["args"].fps,
@@ -125,21 +157,13 @@ async def mld_pos(prompt: str):
             "n_joints": 22}
 
 
-@app.get("/mld_angle/")
-async def mld_angle(prompt: str, do_translation: bool = True):
-    fps = 20
+@app.get("/angle/")
+async def angle(prompt: str, do_translation: bool = True, do_search: bool = True, do_refine: bool = True):
     if do_translation:
-        try:
-            prompt = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "system",
-                           "content": "translate to english without any explanation. If it's already in english, just repeat it."},
-                          {"role": "user", "content": prompt}],
-                timeout=10,
-            )["choices"][0]["message"]["content"]
-        except:
-            pass
-    joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"], server_data["data"])
+        prompt = translation(prompt)
+    prior = search(prompt) if do_search else None
+    joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
+                           server_data["data"], prior=prior, do_refine=do_refine)
     if ((joints[:, 1, 0] > joints[:, 2, 0]) & (joints[:, 13, 0] > joints[:, 14, 0]) & (
             joints[:, 9, 1] > joints[:, 0, 1])).sum() / joints.shape[0] > 0.85:
         rotations, root_pos = server_data["j2s"](joints, step_size=1e-2, num_iters=150, optimizer="adam")

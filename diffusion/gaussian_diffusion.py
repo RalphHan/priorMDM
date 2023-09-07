@@ -680,7 +680,6 @@ class GaussianDiffusion:
             cond_fn_with_grad=cond_fn_with_grad,
             const_noise=const_noise,
         )):
-
             # unfolding
             if ((arb_len) and (unfolding_handshake > 0) and not (second_take_only)):
                 alpha = torch.arange(0, unfolding_handshake, 1, device=sample['sample'].device) / unfolding_handshake

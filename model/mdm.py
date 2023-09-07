@@ -248,7 +248,6 @@ class InputProcess(nn.Module):
     def forward(self, x):
         bs, njoints, nfeats, nframes = x.shape
         x = x.permute((3, 0, 1, 2)).reshape(nframes, bs, njoints*nfeats)
-
         if self.data_rep in ['rot6d', 'xyz', 'hml_vec']:
             x = self.poseEmbedding(x)  # [seqlen, bs, d]
             return x

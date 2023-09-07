@@ -17,11 +17,10 @@ def unfold_sample_arb_len(sample, handshake_size, step_sizes, final_n_frames, mo
         sample[0, :, :, start:len_i] = old_sample[sample_i, :, :, handshake_size:model_kwargs['y']['lengths'][sample_i]]
     return sample
 
-def single_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mode=False):
-    # FIXME - not working for num_repetitions > 1
-    debug = args.debug_double_take
+def single_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mode=False, prior=None, do_refine=False):
+    if prior is not None and not do_refine:
+        return prior
     sample_fn = diffusion.p_sample_loop
-    handshake_size = args.handshake_size
     batch_size = len(model_kwargs['y']['text'])
 
     # Unfolding - orig
@@ -30,15 +29,12 @@ def single_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
         (batch_size, model.njoints, model.nfeats, n_frames),
         clip_denoised=False,
         model_kwargs=model_kwargs,
-        skip_timesteps=0 if not debug else 998,  # 0 is the default value - i.e. don't skip any step
-        init_image=None,
+        skip_timesteps=0 if prior is None else args.skip_steps_double_take,
+        init_image=prior,
         progress=not eval_mode,
         dump_steps=None,
         noise=None,
         const_noise=False,
-        unfolding_handshake=handshake_size,
-        arb_len=True,
-        second_take_only=args.second_take_only
     )
     return sample
 
