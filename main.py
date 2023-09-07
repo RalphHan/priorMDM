@@ -143,7 +143,7 @@ def translation(prompt):
 
 def search(prompt):
     ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/", params={"query": prompt, "max_num": 1}).json()
-    motion_id = ret[0]["motion_id"].strip('M')
+    motion_id = ret[0]["motion_id"]
     motion = np.load(f"database/{motion_id}.npy")
     return motion
 
