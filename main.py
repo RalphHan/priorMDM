@@ -155,8 +155,8 @@ def translation(prompt):
 
 def search(prompt, want_number=1):
     ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/",
-                       params={"query": prompt, "max_num": want_number * 8}).json()
-    motion_ids = list(OrderedSet([x["motion_id"].strip('M') for x in ret]))
+                       params={"query": prompt, "max_num": want_number * 4}).json()
+    motion_ids = list(OrderedSet([x["motion_id"] for x in ret]))
     assert motion_ids
     want_ids = []
     while len(want_ids) < want_number:
