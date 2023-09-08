@@ -1,7 +1,9 @@
 import random
 import dotenv
+
 dotenv.load_dotenv()
 import openai, os
+
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 from fastapi import FastAPI
@@ -17,9 +19,10 @@ from utils.model_util import load_model
 from utils import dist_util
 from data_loaders.get_data import get_dataset_loader
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
-from utils.sampling_utils import unfold_sample_arb_len, single_take_arb_len
+from utils.sampling_utils import single_take_arb_len
 from visualize import Joints2SMPL
 import requests
+from ordered_set import OrderedSet
 
 
 def load_dataset(args, n_frames):
@@ -87,44 +90,53 @@ def init_data():
     return server_data
 
 
-def prompt2motion(prompt, args, model, diffusion, data, prior=None, do_refine=False):
-    n_frames = args.n_frames
-    if prior is not None:
+def prompt2motion(prompt, args, model, diffusion, data, priors=None, do_refine=False, want_number: int = 1):
+    if priors is not None:
+        assert len(priors) == want_number
         if not do_refine:
-            n_frames = prior.shape[0]
+            lengths = [prior.shape[0] for prior in priors]
+            max_frames = max(lengths)
         else:
-            n_frames = min(n_frames, prior.shape[0])
-        st_frame = random.randint(0, prior.shape[0] - n_frames)
-        prior = prior[st_frame:st_frame + n_frames]
-        prior = (prior - data.dataset.mean) / data.dataset.std
-        prior = prior.transpose(1, 0)[None, :, None]
-        prior = torch.tensor(prior, dtype=torch.float32).to(dist_util.dev())
-    elif do_refine:
+            lengths = [min(args.n_frames, prior.shape[0]) for prior in priors]
+            max_frames = max(lengths)
+        st_frames = [random.randint(0, prior.shape[0] - l) for l, prior in zip(lengths, priors)]
+
+        priors = [(prior[st:st + l] - data.dataset.mean) / data.dataset.std for st, l, prior in
+                  zip(st_frames, lengths, priors)]
+        priors = [np.concatenate((prior, np.zeros((max_frames - prior.shape[0], prior.shape[1]), dtype=prior.dtype)),
+                                 axis=0).transpose(1, 0)[None, :, None] for prior in priors]
+        priors = np.concatenate(priors, axis=0)
+        priors = torch.tensor(priors, dtype=torch.float32).to(dist_util.dev())
+    elif not do_refine:
+        lengths = [args.n_frames] * want_number
+        max_frames = args.n_frames
+    else:
         raise
     model_kwargs = {'y': {
-        'mask': torch.ones((1, 1, 1, n_frames)),  # 196 is humanml max frames number
-        'lengths': torch.tensor([n_frames]),
-        'text': [prompt],
+        'mask': torch.ones((want_number, 1, 1, max_frames)),  # 196 is humanml max frames number
+        'lengths': torch.tensor(lengths),
+        'text': [prompt] * want_number,
         'tokens': [''],
-        'scale': torch.ones(1) * (args.guidance_param if not do_refine else args.guidance_param*0.5)
+        'scale': torch.ones(want_number) * (args.guidance_param if not do_refine else args.guidance_param * 0.5)
     }}
     model_kwargs['y'] = {key: val.to(dist_util.dev()) if torch.is_tensor(val) else val for key, val in
                          model_kwargs['y'].items()}
-    sample = single_take_arb_len(args, diffusion, model, model_kwargs, model_kwargs['y']['lengths'][0], prior=prior,
-                                 do_refine=do_refine)
-    sample = unfold_sample_arb_len(sample, args.handshake_size, [n_frames], n_frames, model_kwargs)
+    samples = single_take_arb_len(args, diffusion, model, model_kwargs, max_frames, prior=priors,
+                                  do_refine=do_refine)
     n_joints = 22
-    sample = data.dataset.t2m_dataset.inv_transform(sample.cpu().permute(0, 2, 3, 1)).float()
-    sample = recover_from_ric(sample, n_joints)
-    sample = sample.view(-1, *sample.shape[2:])[0].cpu().numpy()
+    samples = data.dataset.t2m_dataset.inv_transform(samples.cpu().permute(0, 2, 3, 1)).float()
+    samples = recover_from_ric(samples, n_joints)
+    samples = samples.view(-1, *samples.shape[2:]).cpu().numpy()
 
-    vec1 = np.cross(sample[:, 14] - sample[:, 12], sample[:, 13] - sample[:, 12])
-    vec2 = sample[:, 15] - sample[:, 12]
+    vec1 = np.cross(samples[:, :, 14] - samples[:, :, 12], samples[:, :, 13] - samples[:, :, 12])
+    vec2 = samples[:, :, 15] - samples[:, :, 12]
     cosine = (vec1 * vec2).sum(-1) / (np.linalg.norm(vec1, axis=-1) * np.linalg.norm(vec2, axis=-1) + 1e-7)
-    if (sample[:, 9, 1] > sample[:, 0, 1]).sum() / sample.shape[0] > 0.85 \
-            and (cosine > -0.2).sum() / sample.shape[0] < 0.5:
-        sample[..., 0] = -sample[..., 0]
-    return sample
+    for i in range(want_number):
+        if (samples[i, :lengths[i], 9, 1] > samples[i, :lengths[i], 0, 1]).sum() / lengths[i] > 0.85 \
+                and (cosine[i, :lengths[i]] > -0.2).sum() / lengths[i] < 0.5:
+            samples[i, :, :, 0] = -samples[i, :, :, 0]
+    samples = [sample[:l] for sample, l in zip(samples, lengths)]
+    return samples
 
 
 def translation(prompt):
@@ -141,46 +153,52 @@ def translation(prompt):
     return prompt
 
 
-def search(prompt):
-    ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/", params={"query": prompt, "max_num": 5}).json()
-    motion_id = random.choice(ret)["motion_id"]
-    motion = np.load(f"database/{motion_id}.npy")
-    return motion
+def search(prompt, want_number=1):
+    ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/",
+                       params={"query": prompt, "max_num": want_number * 8}).json()
+    motion_ids = list(OrderedSet([x["motion_id"].strip('M') for x in ret]))
+    assert motion_ids
+    want_ids = []
+    while len(want_ids) < want_number:
+        want_ids.extend(motion_ids)
+    want_ids = want_ids[:want_number]
+    motions = [np.load(f"database/{want_id}.npy") for want_id in want_ids]
+    return motions
 
 
 @app.get("/position/")
-async def position(prompt: str, do_translation: bool = True, do_search: bool = True, do_refine: bool = True):
-    print(do_translation, do_search, do_refine)
+async def position(prompt: str, do_translation: bool = True, do_search: bool = True, do_refine: bool = True,
+                   want_number: int = 1):
+    assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    prior = search(prompt) if do_search else None
-    joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
-                           server_data["data"], prior=prior, do_refine=do_refine)
-    return {"positions": binascii.b2a_base64(joints.flatten().astype(np.float32).tobytes()).decode("utf-8"),
-            "dtype": "float32",
-            "fps": server_data["args"].fps,
-            "mode": "xyz",
-            "n_frames": joints.shape[0],
-            "n_joints": 22}
+    priors = search(prompt, want_number) if do_search else None
+    all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
+                               server_data["data"], priors=priors, do_refine=do_refine,
+                               want_number=want_number)
+    return [{"positions": binascii.b2a_base64(joints.flatten().astype(np.float32).tobytes()).decode("utf-8"),
+             "dtype": "float32",
+             "fps": server_data["args"].fps,
+             "mode": "xyz",
+             "n_frames": joints.shape[0],
+             "n_joints": 22} for joints in all_joints]
 
 
 @app.get("/angle/")
-async def angle(prompt: str, do_translation: bool = True, do_search: bool = True, do_refine: bool = True):
+async def angle(prompt: str, do_translation: bool = True, do_search: bool = True, do_refine: bool = True,
+                want_number: int = 1):
+    assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    prior = search(prompt) if do_search else None
-    joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
-                           server_data["data"], prior=prior, do_refine=do_refine)
-    if ((joints[:, 1, 0] > joints[:, 2, 0]) & (joints[:, 13, 0] > joints[:, 14, 0]) & (
-            joints[:, 9, 1] > joints[:, 0, 1])).sum() / joints.shape[0] > 0.85:
-        rotations, root_pos = server_data["j2s"](joints, step_size=1e-2, num_iters=150, optimizer="adam")
-    else:
-        rotations, root_pos = server_data["j2s"](joints, step_size=2e-2, num_iters=25, optimizer="lbfgs")
-    return {"root_positions": binascii.b2a_base64(
+    priors = search(prompt, want_number) if do_search else None
+    all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
+                               server_data["data"], priors=priors, do_refine=do_refine)
+    all_rotations, all_root_pos = server_data["j2s"](all_joints, step_size=2e-2, num_iters=25, optimizer="lbfgs")
+    return [{"root_positions": binascii.b2a_base64(
         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
-            "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode("utf-8"),
-            "dtype": "float32",
-            "fps": server_data["args"].fps,
-            "mode": "axis_angle",
-            "n_frames": joints.shape[0],
-            "n_joints": 24}
+             "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode("utf-8"),
+             "dtype": "float32",
+             "fps": server_data["args"].fps,
+             "mode": "axis_angle",
+             "n_frames": rotations.shape[0],
+             "n_joints": 24} for rotations, root_pos in zip(all_rotations, all_root_pos)]

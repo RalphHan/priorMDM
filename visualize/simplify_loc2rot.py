@@ -24,8 +24,9 @@ class Joints2SMPL:
                                  device=self.device)
 
     def __call__(self, input_joints, step_size=1e-2, num_iters=150, optimizer="adam"):
-        if isinstance(input_joints, np.ndarray):
-            input_joints = torch.from_numpy(input_joints)
+        lengths = [joints.shape[0] for joints in input_joints]
+        input_joints = np.concatenate(input_joints, axis=0)
+        input_joints = torch.from_numpy(input_joints)
         n_frames = input_joints.size(0)
         pred_pose = torch.from_numpy(self.file['pose'][:]).unsqueeze(0).repeat(n_frames, 1).float().to(
             self.device)
@@ -50,9 +51,16 @@ class Joints2SMPL:
             num_iters=num_iters,
             optimizer=optimizer
         )
-        thetas = pose.reshape(n_frames, 24, 3)
-        thetas = geometry.matrix_to_rotation_6d(geometry.axis_angle_to_matrix(thetas)).cpu().numpy()
-        thetas = torch.tensor(filters.gaussian_filter1d(thetas, 1.5, axis=0, mode='nearest'))
-        thetas = geometry.matrix_to_axis_angle(geometry.rotation_6d_to_matrix(thetas)).numpy()
-        root_loc = keypoints_3d[:, 0].cpu().numpy()
-        return thetas, root_loc
+        all_thetas = pose.reshape(n_frames, 24, 3)
+        pointer = 0
+        ret_thetas = []
+        ret_root_loc = []
+        for i in range(len(lengths)):
+            thetas = all_thetas[pointer:pointer + lengths[i]]
+            thetas = geometry.matrix_to_rotation_6d(geometry.axis_angle_to_matrix(thetas)).cpu().numpy()
+            thetas = torch.tensor(filters.gaussian_filter1d(thetas, 1.5, axis=0, mode='nearest'))
+            thetas = geometry.matrix_to_axis_angle(geometry.rotation_6d_to_matrix(thetas)).numpy()
+            ret_thetas.append(thetas)
+            ret_root_loc.append(keypoints_3d[pointer:pointer + lengths[i], 0].cpu().numpy())
+            pointer += lengths[i]
+        return ret_thetas, ret_root_loc
