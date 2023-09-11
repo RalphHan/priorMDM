@@ -192,7 +192,8 @@ async def angle(prompt: str, do_translation: bool = True, do_search: bool = True
         prompt = translation(prompt)
     priors = search(prompt, want_number) if do_search else None
     all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
-                               server_data["data"], priors=priors, do_refine=do_refine)
+                               server_data["data"], priors=priors, do_refine=do_refine,
+                               want_number=want_number)
     all_rotations, all_root_pos = server_data["j2s"](all_joints, step_size=2e-2, num_iters=25, optimizer="lbfgs")
     return [{"root_positions": binascii.b2a_base64(
         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
