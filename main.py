@@ -195,11 +195,11 @@ async def angle(prompt: str, do_translation: bool = True, do_search: bool = True
                                server_data["data"], priors=priors, do_refine=do_refine,
                                want_number=want_number)
     all_rotations, all_root_pos = server_data["j2s"](all_joints, step_size=2e-2, num_iters=25, optimizer="lbfgs")
-    return [{"root_positions": binascii.b2a_base64(
+    return {"clips":[{"root_positions": binascii.b2a_base64(
         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
              "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode("utf-8"),
              "dtype": "float32",
              "fps": server_data["args"].fps,
              "mode": "axis_angle",
              "n_frames": rotations.shape[0],
-             "n_joints": 24} for rotations, root_pos in zip(all_rotations, all_root_pos)]
+             "n_joints": 24} for rotations, root_pos in zip(all_rotations, all_root_pos)]}
