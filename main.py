@@ -23,6 +23,7 @@ from utils.sampling_utils import single_take_arb_len
 from visualize import Joints2SMPL
 import requests
 from ordered_set import OrderedSet
+import json
 
 
 def load_dataset(args, n_frames):
@@ -153,7 +154,7 @@ def translation(prompt):
     return prompt
 
 
-def search(prompt, want_number=1):
+def search(prompt, want_number=1, get_h3d=True):
     ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/",
                        params={"query": prompt, "max_num": want_number * 4}).json()
     motion_ids = list(OrderedSet([x["motion_id"] for x in ret]))
@@ -162,7 +163,13 @@ def search(prompt, want_number=1):
     while len(want_ids) < want_number:
         want_ids.extend(motion_ids)
     want_ids = want_ids[:want_number]
-    motions = [np.load(f"database/{want_id}.npy") for want_id in want_ids]
+    motions = []
+    for want_id in want_ids:
+        if get_h3d:
+            motions.append(np.load(f"database/{want_id}.npy"))
+        else:
+            with open(f"motion_database/{want_id}.json") as f:
+                motions.append(json.load(f))
     return motions
 
 
@@ -190,16 +197,19 @@ async def angle(prompt: str, do_translation: bool = True, do_search: bool = True
     assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    priors = search(prompt, want_number) if do_search else None
+    priors = search(prompt, want_number, get_h3d=do_refine) if do_search else None
+    if do_search and not do_refine:
+        return {"clips": priors}
     all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
                                server_data["data"], priors=priors, do_refine=do_refine,
                                want_number=want_number)
     all_rotations, all_root_pos = server_data["j2s"](all_joints, step_size=2e-2, num_iters=25, optimizer="lbfgs")
-    return {"clips":[{"root_positions": binascii.b2a_base64(
+    return {"clips": [{"root_positions": binascii.b2a_base64(
         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
-             "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode("utf-8"),
-             "dtype": "float32",
-             "fps": server_data["args"].fps,
-             "mode": "axis_angle",
-             "n_frames": rotations.shape[0],
-             "n_joints": 24} for rotations, root_pos in zip(all_rotations, all_root_pos)]}
+                       "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode(
+                           "utf-8"),
+                       "dtype": "float32",
+                       "fps": server_data["args"].fps,
+                       "mode": "axis_angle",
+                       "n_frames": rotations.shape[0],
+                       "n_joints": 24} for rotations, root_pos in zip(all_rotations, all_root_pos)]}
