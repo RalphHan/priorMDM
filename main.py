@@ -146,7 +146,8 @@ def translation(prompt):
         prompt = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system",
-                       "content": "translate to english without any explanation. If it's already in english, just repeat it."},
+                       "content": "translate to english without any explanation. If it's already in english, just repeat it. "
+                                  "If get a <motion> without a subject, transfer it to: 'A person is <motion>'"},
                       {"role": "user", "content": prompt}],
             timeout=10,
         )["choices"][0]["message"]["content"]
@@ -174,7 +175,6 @@ def search(prompt, want_number=1, do_rank=False, get_h3d=True):
     if do_rank:
         response = None
         try:
-            print(table)
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "system",
@@ -184,7 +184,6 @@ def search(prompt, want_number=1, do_rank=False, get_h3d=True):
                           {"role": "user", "content": table}],
                 timeout=10,
             )["choices"][0]["message"]["content"]
-            print(response)
         except:
             pass
         if response is not None:
@@ -222,7 +221,7 @@ async def position(prompt: str, do_translation: bool = True, do_search: bool = T
     assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    priors = search(prompt, want_number, do_rank=True) if do_search else None
+    priors = search(prompt, want_number) if do_search else None
     all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
                                server_data["data"], priors=priors, do_refine=do_refine,
                                want_number=want_number)
@@ -240,7 +239,7 @@ async def angle(prompt: str, do_translation: bool = True, do_search: bool = True
     assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    priors = search(prompt, want_number, do_rank=True, get_h3d=do_refine) if do_search else None
+    priors = search(prompt, want_number, get_h3d=do_refine) if do_search else None
     if do_search and not do_refine:
         return {"clips": priors}
     all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
