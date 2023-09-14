@@ -24,6 +24,7 @@ from visualize import Joints2SMPL
 import requests
 from ordered_set import OrderedSet
 import json
+from collections import defaultdict
 
 
 def load_dataset(args, n_frames):
@@ -154,10 +155,52 @@ def translation(prompt):
     return prompt
 
 
-def search(prompt, want_number=1, get_h3d=True):
+def search(prompt, want_number=1, do_rank=False, get_h3d=True):
     ret = requests.get(os.getenv("SEARCH_SERVER") + "/result/",
-                       params={"query": prompt, "max_num": want_number * 4}).json()
-    motion_ids = list(OrderedSet([x["motion_id"] for x in ret]))
+                       params={"query": prompt, "fs_weight": 0.1, "max_num": want_number * 12}).json()
+    texts = OrderedSet()
+    text2motions = defaultdict(list)
+    for x in ret:
+        texts.add(x["desc"])
+        text2motions[x["desc"]].append(x["motion_id"])
+    table = []
+    table.append("|".join(["query", prompt]))
+    table.append("----------")
+    for i, text in enumerate(texts):
+        if i >= 16: break
+        table.append("|".join([str(i + 1), text]))
+    num_rows = len(table) - 2
+    table = "\n".join(table)
+    if do_rank:
+        response = None
+        try:
+            print(table)
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "system",
+                           "content": "Rank the 'result' motions by similarity to 'query' motion. "
+                                      "The first one is the most similar one. Print the id list with out any explanation. e.g.:\n1 3 2\n"
+                                      "The query motion (first line) and result motions (following lines) is:\n"},
+                          {"role": "user", "content": table}],
+                timeout=10,
+            )["choices"][0]["message"]["content"]
+            print(response)
+        except:
+            pass
+        if response is not None:
+            ranked_texts = OrderedSet()
+            for text_id in response.strip().split():
+                try:
+                    if 1 <= int(text_id) <= num_rows:
+                        ranked_texts.add(texts[int(text_id) - 1])
+                except:
+                    pass
+            texts = ranked_texts | texts
+    motion_ids = []
+    for text in texts:
+        sub_motion_ids = text2motions[text].copy()
+        random.shuffle(sub_motion_ids)
+        motion_ids.extend(sub_motion_ids)
     assert motion_ids
     want_ids = []
     while len(want_ids) < want_number:
@@ -179,7 +222,7 @@ async def position(prompt: str, do_translation: bool = True, do_search: bool = T
     assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    priors = search(prompt, want_number) if do_search else None
+    priors = search(prompt, want_number, do_rank=True) if do_search else None
     all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
                                server_data["data"], priors=priors, do_refine=do_refine,
                                want_number=want_number)
@@ -197,7 +240,7 @@ async def angle(prompt: str, do_translation: bool = True, do_search: bool = True
     assert 1 <= want_number <= 4
     if do_translation:
         prompt = translation(prompt)
-    priors = search(prompt, want_number, get_h3d=do_refine) if do_search else None
+    priors = search(prompt, want_number, do_rank=True, get_h3d=do_refine) if do_search else None
     if do_search and not do_refine:
         return {"clips": priors}
     all_joints = prompt2motion(prompt, server_data["args"], server_data["model"], server_data["diffusion"],
