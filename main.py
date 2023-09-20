@@ -159,9 +159,12 @@ def translation(prompt):
 
 
 async def fetch(session, **kwargs):
-    async with session.get(**kwargs) as response:
-        data = await response.json()
-    return OrderedSet([x["motion_id"] for x in data])
+    try:
+        async with session.get(**kwargs) as response:
+            data = await response.json()
+        return OrderedSet([x["motion_id"] for x in data])
+    except:
+        return
 
 
 async def search(prompt, want_number=1, get_h3d=True):
@@ -170,8 +173,15 @@ async def search(prompt, want_number=1, get_h3d=True):
                             params={"query": prompt, "fs_weight": 0.1, "max_num": want_number * 4 * 4})
         t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
                             params={"query": prompt, "max_num": want_number * 4})
-        weights = [1.0, 0.5]
-        ranks = await asyncio.gather(*[t2t_request, t2m_request])
+        _weights = [1.0, 0.5]
+        _ranks = await asyncio.gather(*[t2t_request, t2m_request])
+        weights=[]
+        ranks=[]
+        for rank, weight in zip(_ranks, _weights):
+            if rank is not None:
+                weights.append(weight)
+                ranks.append(rank)
+        assert ranks
     min_length = min([len(rank) for rank in ranks])
     for i in range(len(ranks)):
         ranks[i] = ranks[i][:min_length]
@@ -185,11 +195,11 @@ async def search(prompt, want_number=1, get_h3d=True):
         for x in total_id:
             total_rank[x] += rank.get(x, min_length) * weight/sum(weights)
             min_rank[x] = min(min_rank[x], rank.get(x, min_length))
-    final_fank={}
+    final_rank={}
     for x in total_id:
-        final_fank[x] = (total_rank[x]*2 + min_rank[x])/3
-    final_fank = sorted(final_fank.items(), key=lambda x: x[1])
-    motion_ids = [x[0] for x in final_fank]
+        final_rank[x] = (total_rank[x]*2 + min_rank[x])/3
+    final_rank = sorted(final_rank.items(), key=lambda x: x[1])
+    motion_ids = [x[0] for x in final_rank]
     assert motion_ids
     want_ids = []
     while len(want_ids) < want_number:
