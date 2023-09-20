@@ -174,7 +174,7 @@ async def search(prompt, want_number=1, get_h3d=True):
                             params={"query": prompt, "fs_weight": 0.1, "max_num": want_number * 4 * 4})
         t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
                             params={"query": prompt, "max_num": want_number * 4})
-        _weights = [1.0, 0.5]
+        _weights = [6.0, 1.0]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
         weights=[]
         ranks=[]
@@ -198,7 +198,7 @@ async def search(prompt, want_number=1, get_h3d=True):
             min_rank[x] = min(min_rank[x], rank.get(x, min_length))
     final_rank={}
     for x in total_id:
-        final_rank[x] = (total_rank[x]*2 + min_rank[x])/3
+        final_rank[x] = (total_rank[x]*4 + min_rank[x])/5
     final_rank = sorted(final_rank.items(), key=lambda x: x[1])
     motion_ids = [x[0] for x in final_rank]
     assert motion_ids
