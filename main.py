@@ -162,6 +162,7 @@ async def fetch(session, **kwargs):
     try:
         async with session.get(**kwargs) as response:
             data = await response.json()
+            assert response.status == 200
         return OrderedSet([x["motion_id"] for x in data])
     except:
         return
