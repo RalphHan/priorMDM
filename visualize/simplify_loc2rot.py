@@ -3,7 +3,6 @@ import os
 import torch
 import h5py
 from .joints2smpl import config
-from .joints2smpl.my_smpl import MySMPL
 from .joints2smpl.smplify import SMPLify3D
 import scipy.ndimage.filters as filters
 import utils.rotation_conversions as geometry
@@ -16,11 +15,17 @@ class Joints2SMPL:
         self.num_joints = 22
         self.joint_category = "AMASS"
         self.fix_foot = False
+        self.use_collision = False
+        if self.use_collision:
+            from smplx import SMPL
+        else:
+            from .joints2smpl.my_smpl import MySMPL as SMPL
         model_path = os.path.join(config.SMPL_MODEL_DIR, "smpl")
-        smplmodel = MySMPL(model_path, gender="neutral", ext="pkl").to(self.device)
+        smplmodel = SMPL(model_path, gender="neutral", ext="pkl").to(self.device)
         self.file = h5py.File(config.SMPL_MEAN_FILE, 'r')
         self.smplify = SMPLify3D(smplxmodel=smplmodel,
                                  joints_category=self.joint_category,
+                                 use_collision=self.use_collision,
                                  device=self.device)
 
     def __call__(self, input_joints, step_size=1e-2, num_iters=150, optimizer="adam"):
@@ -41,7 +46,7 @@ class Joints2SMPL:
             confidence_input[10] = 1.5
             confidence_input[11] = 1.5
 
-        pose, _, _ = self.smplify(
+        pose, _ = self.smplify(
             pred_pose.detach(),
             pred_betas.detach(),
             pred_cam_t.detach(),

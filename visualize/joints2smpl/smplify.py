@@ -4,6 +4,9 @@ from .customloss import (camera_fitting_loss_3d,
                          )
 from .prior import MaxMixturePrior
 from . import config
+import os
+import pickle
+from tqdm import tqdm
 
 
 @torch.no_grad()
@@ -38,6 +41,7 @@ class SMPLify3D():
     def __init__(self,
                  smplxmodel,
                  joints_category="orig",
+                 use_collision=False,
                  device=torch.device('cuda:0'),
                  ):
         self.device = device
@@ -48,13 +52,39 @@ class SMPLify3D():
 
         self.model_faces = smplxmodel.faces_tensor.view(-1)
         self.joints_category = joints_category
+        self.use_collision = use_collision
+        if self.use_collision:
+            self.part_segm_fn = config.Part_Seg_DIR
         self.smpl_index = config.amass_smpl_idx
         self.corr_index = config.amass_idx
 
-    def __call__(self, init_pose, init_betas, init_cam_t, j3d, conf_3d=1.0, step_size=1e-2, num_iters=100, optimizer='adam'):
+    def __call__(self, init_pose, init_betas, init_cam_t, j3d, conf_3d=1.0, step_size=1e-2, num_iters=100,
+                 optimizer='adam'):
         search_tree = None
         pen_distance = None
         filter_faces = None
+        if self.use_collision:
+            from mesh_intersection.bvh_search_tree import BVH
+            import mesh_intersection.loss as collisions_loss
+            from mesh_intersection.filter_faces import FilterFaces
+
+            search_tree = BVH(max_collisions=8)
+
+            pen_distance = collisions_loss.DistanceFieldPenetrationLoss(
+                sigma=0.5, point2plane=False, vectorized=True, penalize_outside=True)
+
+            if self.part_segm_fn:
+                # Read the part segmentation
+                part_segm_fn = os.path.expandvars(self.part_segm_fn)
+                with open(part_segm_fn, 'rb') as faces_parents_file:
+                    face_segm_data = pickle.load(faces_parents_file, encoding='latin1')
+                faces_segm = face_segm_data['segm']
+                faces_parents = face_segm_data['parents']
+                # Create the module used to filter invalid collision pairs
+                filter_faces = FilterFaces(
+                    faces_segm=faces_segm, faces_parents=faces_parents,
+                    ign_part_pairs=None).to(device=self.device)
+
         body_pose = init_pose[:, 3:].detach().clone()
         global_orient = init_pose[:, :3].detach().clone()
         betas = init_betas.detach().clone()
@@ -98,6 +128,7 @@ class SMPLify3D():
                                               init_cam_t, j3d[:, self.corr_index], self.joints_category)
                 loss.backward()
                 return loss
+
             camera_optimizer.step(closure)
 
         # Fix camera translation after optimizing camera
@@ -116,7 +147,7 @@ class SMPLify3D():
             pose_preserve_weight = 0.0
         elif optimizer == 'lbfgs':
             body_optimizer = torch.optim.LBFGS(body_opt_params, max_iter=num_iters,
-                                                 lr=step_size, line_search_fn='strong_wolfe')
+                                               lr=step_size, line_search_fn='strong_wolfe')
             pose_preserve_weight = 5.0
         else:
             raise NotImplementedError
@@ -128,6 +159,7 @@ class SMPLify3D():
                                         body_pose=body_pose,
                                         betas=betas)
                 model_joints = smpl_output.joints
+                model_vertice = smpl_output.vertices
 
                 loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index],
                                             camera_translation,
@@ -135,14 +167,15 @@ class SMPLify3D():
                                             joints3d_conf=conf_3d,
                                             joint_loss_weight=600.0,
                                             pose_preserve_weight=pose_preserve_weight,
-                                            use_collision=False,
-                                            model_vertices=None, model_faces=self.model_faces,
+                                            use_collision=self.use_collision,
+                                            model_vertices=model_vertice, model_faces=self.model_faces,
                                             search_tree=search_tree, pen_distance=pen_distance,
                                             filter_faces=filter_faces)
                 loss.backward()
                 return loss
+
             body_optimizer.step(closure)
 
         pose = torch.cat([global_orient, body_pose], dim=-1)
 
-        return pose.detach(), betas.detach(), camera_translation.detach()
+        return pose.detach(), camera_translation.detach()
