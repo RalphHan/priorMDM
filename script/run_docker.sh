@@ -4,4 +4,4 @@ docker run -itd \
 --restart always \
 -p 8019:8019 \
 ralphhan/priormdm \
-bash /priorMDM/run_server.sh
+bash /priorMDM/script/run_server.sh
