@@ -51,8 +51,8 @@ async def search(prompt, want_number=1):
                             params={"query": prompt, "max_num": want_number * 4})
         _weights = [6.0, 1.0]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
-        weights=[]
-        ranks=[]
+        weights = []
+        ranks = []
         for rank, weight in zip(_ranks, _weights):
             if rank is not None:
                 weights.append(weight)
@@ -62,18 +62,18 @@ async def search(prompt, want_number=1):
     for i in range(len(ranks)):
         ranks[i] = ranks[i][:min_length]
     total_rank = defaultdict(float)
-    min_rank = defaultdict(lambda :min_length)
+    min_rank = defaultdict(lambda: min_length)
     total_id = set()
     for rank in ranks:
         total_id |= rank
     for rank, weight in zip(ranks, weights):
         rank = {x: i for i, x in enumerate(rank)}
         for x in total_id:
-            total_rank[x] += rank.get(x, min_length) * weight/sum(weights)
+            total_rank[x] += rank.get(x, min_length) * weight / sum(weights)
             min_rank[x] = min(min_rank[x], rank.get(x, min_length))
-    final_rank={}
+    final_rank = {}
     for x in total_id:
-        final_rank[x] = (total_rank[x]*4 + min_rank[x])/5
+        final_rank[x] = (total_rank[x] * 4 + min_rank[x]) / 5
     final_rank = sorted(final_rank.items(), key=lambda x: x[1])
     motion_ids = [x[0] for x in final_rank]
     assert motion_ids
@@ -90,6 +90,8 @@ async def search(prompt, want_number=1):
 
 @app.get("/angle/")
 async def angle(prompt: str, do_translation: bool = False, want_number: int = 1):
+    assert 1 <= want_number <= 20
+    prompt = prompt[:100]
     if do_translation:
         prompt = translation(prompt)
     priors = await search(prompt, want_number)
