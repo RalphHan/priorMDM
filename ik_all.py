@@ -37,18 +37,23 @@ def worker(worker_id, n_workers):
         batch.append((motion_file, joints))
         if len(batch) < batch_size and motion_file != motions[-1]:
             continue
-        all_rotations, all_root_pos = j2s([x[1] for x in batch], step_size=2e-2, num_iters=30, optimizer="lbfgs")
-        for rotations, root_pos, file in zip(all_rotations, all_root_pos, [x[0] for x in batch]):
-            with open(f"motion_database2/{file.replace('.npy', '.json')}", "w") as f:
-                json.dump({"root_positions": binascii.b2a_base64(
-                    root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
-                           "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode(
-                               "utf-8"),
-                           "dtype": "float32",
-                           "fps": 30 if file.startswith("mixamo_") else 20,
-                           "mode": "axis_angle",
-                           "n_frames": rotations.shape[0],
-                           "n_joints": 24}, f, indent=4)
+        try:
+            all_rotations, all_root_pos = j2s([x[1] for x in batch], step_size=2e-2, num_iters=30, optimizer="lbfgs")
+            for rotations, root_pos, file in zip(all_rotations, all_root_pos, [x[0] for x in batch]):
+                with open(f"motion_database2/{file.replace('.npy', '.json')}", "w") as f:
+                    json.dump({"root_positions": binascii.b2a_base64(
+                        root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
+                               "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode(
+                                   "utf-8"),
+                               "dtype": "float32",
+                               "fps": 30 if file.startswith("mixamo_") else 20,
+                               "mode": "axis_angle",
+                               "n_frames": rotations.shape[0],
+                               "n_joints": 24}, f, indent=4)
+        except:
+            with open("failed.txt", "a") as f:
+                for x in batch:
+                    f.write(f"{x[0]}\n")
         batch.clear()
 
 
