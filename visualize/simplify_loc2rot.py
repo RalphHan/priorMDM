@@ -15,7 +15,7 @@ class Joints2SMPL:
         self.num_joints = 22
         self.joint_category = "AMASS"
         self.fix_foot = False
-        self.use_collision = False
+        self.use_collision = True
         if self.use_collision:
             from smplx import SMPL
         else:
