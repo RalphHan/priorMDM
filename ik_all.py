@@ -13,7 +13,7 @@ batch_size = 1
 
 def worker(worker_id, n_workers):
     motions = sorted(os.listdir("database/"))
-    j2s = Joints2SMPL(device=f"cuda:{worker_id%torch.cuda.device_count()}")
+    j2s = Joints2SMPL(device=f"cuda")
     block_size = (len(motions) + n_workers - 1) // n_workers
     start = worker_id * block_size
     end = start + block_size
