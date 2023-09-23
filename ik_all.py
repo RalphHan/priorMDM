@@ -8,7 +8,7 @@ from tqdm import tqdm
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
 import sys
 
-batch_size = 10
+batch_size = 1
 
 
 def worker(worker_id, n_workers):
