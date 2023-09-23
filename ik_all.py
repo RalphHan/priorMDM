@@ -24,7 +24,12 @@ def worker(worker_id, n_workers):
     batch = []
     for motion_file in tqdm(motions):
         if os.path.exists(f"motion_database2/{motion_file.replace('.npy', '.json')}"):
-            continue
+            try:
+                with open(f"motion_database2/{motion_file.replace('.npy', '.json')}") as f:
+                    json.load(f)["fps"]
+                continue
+            except:
+                pass
         joints = torch.tensor(np.load(f"database/{motion_file}"))
         n_joints = 22
         joints = recover_from_ric(joints, n_joints).numpy()
