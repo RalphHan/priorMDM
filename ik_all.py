@@ -6,15 +6,14 @@ from visualize import Joints2SMPL
 import os
 from tqdm import tqdm
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
-import torch.multiprocessing as mp
+import sys
 
-n_workers = torch.cuda.device_count()
-batch_size = 1
+batch_size = 10
 
 
-def worker(worker_id):
+def worker(worker_id, n_workers):
     motions = sorted(os.listdir("database/"))
-    j2s = Joints2SMPL(device=f"cuda:{worker_id}")
+    j2s = Joints2SMPL(device=f"cuda:{worker_id%torch.cuda.device_count()}")
     block_size = (len(motions) + n_workers - 1) // n_workers
     start = worker_id * block_size
     end = start + block_size
@@ -50,14 +49,5 @@ def worker(worker_id):
 
 
 if __name__ == '__main__':
-    mp.set_start_method('spawn')
-    processes = []
-    for i in range(n_workers):
-        p = mp.Process(target=worker, args=(i,))
-        processes.append(p)
-        p.start()
+    worker(int(sys.argv[1]), int(sys.argv[2]))
 
-    for p in processes:
-        p.join()
-
-    print("Done!")
