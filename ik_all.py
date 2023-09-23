@@ -9,7 +9,7 @@ from data_loaders.humanml.scripts.motion_process import recover_from_ric
 import torch.multiprocessing as mp
 
 n_workers = torch.cuda.device_count()
-batch_size = 50
+batch_size = 10
 
 
 def worker(worker_id):
