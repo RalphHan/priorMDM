@@ -1,3 +1,5 @@
+import setproctitle
+setproctitle.setproctitle("IK")
 import binascii
 import json
 import numpy as np
