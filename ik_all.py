@@ -15,7 +15,7 @@ batch_size = 1
 
 def worker(worker_id, n_workers):
     motions = sorted(os.listdir("database/"))
-    j2s = Joints2SMPL(device=f"cuda:{worker_id%torch.cuda.device_count()}")
+    j2s = Joints2SMPL(device=f"cuda:{worker_id%torch.cuda.device_count()}", use_collision=True)
     block_size = (len(motions) + n_workers - 1) // n_workers
     start = worker_id * block_size
     end = start + block_size
@@ -23,6 +23,8 @@ def worker(worker_id, n_workers):
     os.makedirs("motion_database2/", exist_ok=True)
     batch = []
     for motion_file in tqdm(motions):
+        if os.path.exists(f"motion_database2/{motion_file.replace('.npy', '.json')}"):
+            continue
         joints = torch.tensor(np.load(f"database/{motion_file}"))
         n_joints = 22
         joints = recover_from_ric(joints, n_joints).numpy()

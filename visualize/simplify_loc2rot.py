@@ -10,12 +10,12 @@ import utils.rotation_conversions as geometry
 
 class Joints2SMPL:
 
-    def __init__(self, device):
+    def __init__(self, device, use_collision=False):
         self.device = torch.device(device)
         self.num_joints = 22
         self.joint_category = "AMASS"
         self.fix_foot = False
-        self.use_collision = True
+        self.use_collision = use_collision
         if self.use_collision:
             from smplx import SMPL
         else:
