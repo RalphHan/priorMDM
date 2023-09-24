@@ -191,12 +191,18 @@ class SMPLify3D():
                 if filter_faces is not None:
                     collision_idxs = filter_faces(collision_idxs)
                 print(body_pose.shape[0], collision_idxs.ge(0).sum().item())
-
-                collision_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
-                pose_preserve_weight = 0.0
-                for _ in range(30):
+                if optimizer == 'adam':
+                    body_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
+                    pose_preserve_weight = 0.0
+                elif optimizer == 'lbfgs':
+                    body_optimizer = torch.optim.LBFGS(body_opt_params, max_iter=num_iters,
+                                                       lr=step_size, line_search_fn='strong_wolfe')
+                    pose_preserve_weight = 5.0
+                else:
+                    raise NotImplementedError
+                for _ in range(num_iters):
                     def closure():
-                        collision_optimizer.zero_grad()
+                        body_optimizer.zero_grad()
                         smpl_output = self.smpl(global_orient=global_orient,
                                                 body_pose=body_pose,
                                                 betas=betas)
@@ -216,7 +222,7 @@ class SMPLify3D():
                         loss.backward()
                         return loss
 
-                    collision_optimizer.step(closure)
+                    body_optimizer.step(closure)
         except:
             pass
 
