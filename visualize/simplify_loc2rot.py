@@ -29,6 +29,8 @@ class Joints2SMPL:
                                  device=self.device)
 
     def __call__(self, input_joints, step_size=1e-2, num_iters=150, optimizer="adam", refine=None):
+        if refine is not None:
+            assert self.use_collision
         lengths = [joints.shape[0] for joints in input_joints]
         input_joints = np.concatenate(input_joints, axis=0)
         input_joints = torch.from_numpy(input_joints)

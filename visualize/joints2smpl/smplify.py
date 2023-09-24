@@ -148,7 +148,7 @@ class SMPLify3D():
         # --- if we use the sequence, fix the shape
         # betas.requires_grad = True
         body_opt_params = [body_pose, global_orient, camera_translation]
-
+        refine_assert = True
         for stage in range(2):
             try:
                 if stage == 0 and refine is not None:
@@ -167,6 +167,8 @@ class SMPLify3D():
                         if filter_faces is not None:
                             collision_idxs = filter_faces(collision_idxs)
                         if collision_idxs.ge(0).sum().item() / body_pose.shape[0] < 500:
+                            if refine is not None:
+                                refine_assert = False
                             continue
                     else:
                         continue
@@ -206,7 +208,7 @@ class SMPLify3D():
                     body_optimizer.step(closure)
             except:
                 assert stage == 1
-
+        assert refine_assert
         pose = torch.cat([global_orient, body_pose], dim=-1)
 
         return pose.detach(), camera_translation.detach()
