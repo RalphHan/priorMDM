@@ -43,7 +43,7 @@ def worker(worker_id, n_workers):
         if (joints[:, 9, 1] > joints[:, 0, 1]).sum() / joints.shape[0] > 0.85 \
                 and (cosine > -0.2).sum() / joints.shape[0] < 0.5:
             joints[..., 0] = -joints[..., 0]
-        with open(f"motion_database/{file.replace('.npy', '.json')}") as f:
+        with open(f"motion_database/{motion_file.replace('.npy', '.json')}") as f:
             json_data = json.load(f)
             refine = np.frombuffer(binascii.a2b_base64(json_data["rotations"]),
                                    dtype=json_data["dtype"]).reshape(-1, 24, 3)
