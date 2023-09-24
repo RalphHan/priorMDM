@@ -208,6 +208,7 @@ class SMPLify3D():
                     body_optimizer.step(closure)
             except:
                 assert stage == 1
+                assert refine is None
         assert refine_assert
         pose = torch.cat([global_orient, body_pose], dim=-1)
 
