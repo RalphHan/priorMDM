@@ -9,13 +9,15 @@ import os
 from tqdm import tqdm
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
 import sys
+import random
 
 batch_size = 1
 
 
 def worker(worker_id, n_workers):
     motions = sorted(os.listdir("database/"))
-    motions = ["013049.npy"]
+    random.seed(12321)
+    random.shuffle(motions)
     j2s = Joints2SMPL(device=f"cuda:{worker_id%torch.cuda.device_count()}", use_collision=True)
     block_size = (len(motions) + n_workers - 1) // n_workers
     start = worker_id * block_size

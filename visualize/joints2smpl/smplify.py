@@ -142,55 +142,26 @@ class SMPLify3D():
         # betas.requires_grad = True
         body_opt_params = [body_pose, global_orient, camera_translation]
 
-        if optimizer == 'adam':
-            body_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
-            pose_preserve_weight = 0.0
-        elif optimizer == 'lbfgs':
-            body_optimizer = torch.optim.LBFGS(body_opt_params, max_iter=num_iters,
-                                               lr=step_size, line_search_fn='strong_wolfe')
-            pose_preserve_weight = 5.0
-        else:
-            raise NotImplementedError
+        for stage in range(2):
+            try:
+                if stage == 1:
+                    if self.use_collision:
+                        smpl_output = self.smpl(global_orient=global_orient,
+                                                body_pose=body_pose,
+                                                betas=betas)
+                        model_vertices = smpl_output.vertices
+                        triangles = torch.index_select(
+                            model_vertices, 1,
+                            self.model_faces).view(body_pose.shape[0], -1, 3, 3)
+                        with torch.no_grad():
+                            collision_idxs = search_tree(triangles)
+                        if filter_faces is not None:
+                            collision_idxs = filter_faces(collision_idxs)
+                        if collision_idxs.ge(0).sum().item() / body_pose.shape[0] < 500:
+                            continue
+                    else:
+                        continue
 
-        for _ in range(num_iters):
-            def closure():
-                body_optimizer.zero_grad()
-                smpl_output = self.smpl(global_orient=global_orient,
-                                        body_pose=body_pose,
-                                        betas=betas)
-                model_joints = smpl_output.joints
-                model_vertice = smpl_output.vertices
-
-                loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index],
-                                            camera_translation,
-                                            j3d[:, self.corr_index], self.pose_prior,
-                                            joints3d_conf=conf_3d,
-                                            joint_loss_weight=600.0,
-                                            pose_preserve_weight=pose_preserve_weight,
-                                            use_collision=False,
-                                            model_vertices=model_vertice, model_faces=self.model_faces,
-                                            search_tree=search_tree, pen_distance=pen_distance,
-                                            filter_faces=filter_faces)
-                loss.backward()
-                return loss
-
-            body_optimizer.step(closure)
-
-        # --------Step 3: Optimize Collision --------------------------
-        try:
-            if self.use_collision:
-                smpl_output = self.smpl(global_orient=global_orient,
-                                        body_pose=body_pose,
-                                        betas=betas)
-                model_vertices = smpl_output.vertices
-                triangles = torch.index_select(
-                    model_vertices, 1,
-                    self.model_faces).view(body_pose.shape[0], -1, 3, 3)
-                with torch.no_grad():
-                    collision_idxs = search_tree(triangles)
-                if filter_faces is not None:
-                    collision_idxs = filter_faces(collision_idxs)
-                print(body_pose.shape[0], collision_idxs.ge(0).sum().item())
                 if optimizer == 'adam':
                     body_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
                     pose_preserve_weight = 0.0
@@ -200,6 +171,7 @@ class SMPLify3D():
                     pose_preserve_weight = 5.0
                 else:
                     raise NotImplementedError
+
                 for _ in range(num_iters):
                     def closure():
                         body_optimizer.zero_grad()
@@ -215,7 +187,7 @@ class SMPLify3D():
                                                     joints3d_conf=conf_3d,
                                                     joint_loss_weight=600.0,
                                                     pose_preserve_weight=pose_preserve_weight,
-                                                    use_collision=True,
+                                                    use_collision=stage == 1,
                                                     model_vertices=model_vertice, model_faces=self.model_faces,
                                                     search_tree=search_tree, pen_distance=pen_distance,
                                                     filter_faces=filter_faces)
@@ -223,8 +195,8 @@ class SMPLify3D():
                         return loss
 
                     body_optimizer.step(closure)
-        except:
-            pass
+            except:
+                assert stage == 1
 
         pose = torch.cat([global_orient, body_pose], dim=-1)
 
