@@ -20,12 +20,12 @@ def worker(worker_id, n_workers):
     start = worker_id * block_size
     end = start + block_size
     motions = motions[start:end]
-    os.makedirs("motion_database2/", exist_ok=True)
+    os.makedirs("motion_database3/", exist_ok=True)
     batch = []
     for motion_file in tqdm(motions):
-        if os.path.exists(f"motion_database2/{motion_file.replace('.npy', '.json')}"):
+        if os.path.exists(f"motion_database3/{motion_file.replace('.npy', '.json')}"):
             try:
-                with open(f"motion_database2/{motion_file.replace('.npy', '.json')}") as f:
+                with open(f"motion_database3/{motion_file.replace('.npy', '.json')}") as f:
                     json.load(f)["fps"]
                 continue
             except:
@@ -45,7 +45,7 @@ def worker(worker_id, n_workers):
         try:
             all_rotations, all_root_pos = j2s([x[1] for x in batch], step_size=2e-2, num_iters=30, optimizer="lbfgs")
             for rotations, root_pos, file in zip(all_rotations, all_root_pos, [x[0] for x in batch]):
-                with open(f"motion_database2/{file.replace('.npy', '.json')}", "w") as f:
+                with open(f"motion_database3/{file.replace('.npy', '.json')}", "w") as f:
                     json.dump({"root_positions": binascii.b2a_base64(
                         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
                                "rotations": binascii.b2a_base64(rotations.flatten().astype(np.float32).tobytes()).decode(

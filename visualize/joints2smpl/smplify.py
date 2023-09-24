@@ -167,7 +167,7 @@ class SMPLify3D():
                                             joints3d_conf=conf_3d,
                                             joint_loss_weight=600.0,
                                             pose_preserve_weight=pose_preserve_weight,
-                                            use_collision=False,
+                                            use_collision=self.use_collision,
                                             model_vertices=model_vertice, model_faces=self.model_faces,
                                             search_tree=search_tree, pen_distance=pen_distance,
                                             filter_faces=filter_faces)
@@ -175,37 +175,6 @@ class SMPLify3D():
                 return loss
 
             body_optimizer.step(closure)
-
-        # --------Step 3: Optimize Collision --------------------------
-        try:
-            if self.use_collision:
-                collision_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
-                pose_preserve_weight = 0.0
-                for _ in range(30):
-                    def closure():
-                        collision_optimizer.zero_grad()
-                        smpl_output = self.smpl(global_orient=global_orient,
-                                                body_pose=body_pose,
-                                                betas=betas)
-                        model_joints = smpl_output.joints
-                        model_vertice = smpl_output.vertices
-
-                        loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index],
-                                                    camera_translation,
-                                                    j3d[:, self.corr_index], self.pose_prior,
-                                                    joints3d_conf=conf_3d,
-                                                    joint_loss_weight=600.0,
-                                                    pose_preserve_weight=pose_preserve_weight,
-                                                    use_collision=True,
-                                                    model_vertices=model_vertice, model_faces=self.model_faces,
-                                                    search_tree=search_tree, pen_distance=pen_distance,
-                                                    filter_faces=filter_faces)
-                        loss.backward()
-                        return loss
-
-                    collision_optimizer.step(closure)
-        except:
-            pass
 
         pose = torch.cat([global_orient, body_pose], dim=-1)
 
