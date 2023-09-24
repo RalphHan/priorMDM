@@ -46,7 +46,7 @@ def worker(worker_id, n_workers):
         with open(f"motion_database/{motion_file.replace('.npy', '.json')}") as f:
             json_data = json.load(f)
             refine = np.frombuffer(binascii.a2b_base64(json_data["rotations"]),
-                                   dtype=json_data["dtype"]).reshape(-1, 24, 3)
+                                   dtype=json_data["dtype"]).reshape(-1, 24*3)
 
         batch.append((motion_file, joints, refine))
         if len(batch) < batch_size and motion_file != motions[-1]:
