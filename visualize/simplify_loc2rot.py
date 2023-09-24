@@ -28,7 +28,7 @@ class Joints2SMPL:
                                  use_collision=self.use_collision,
                                  device=self.device)
 
-    def __call__(self, input_joints, step_size=1e-2, num_iters=150, optimizer="adam"):
+    def __call__(self, input_joints, step_size=1e-2, num_iters=150, optimizer="adam", refine=None):
         lengths = [joints.shape[0] for joints in input_joints]
         input_joints = np.concatenate(input_joints, axis=0)
         input_joints = torch.from_numpy(input_joints)
@@ -40,6 +40,9 @@ class Joints2SMPL:
         pred_cam_t = torch.Tensor([0.0, 0.0, 0.0]).unsqueeze(0).to(self.device)
         keypoints_3d = input_joints.to(self.device).float()
         confidence_input = torch.ones(self.num_joints)
+        if refine is not None:
+            refine = np.concatenate(refine, axis=0)
+            refine = torch.from_numpy(refine).to(self.device).float()
         if self.fix_foot:
             confidence_input[7] = 1.5
             confidence_input[8] = 1.5
@@ -54,7 +57,8 @@ class Joints2SMPL:
             conf_3d=confidence_input.to(self.device),
             step_size=step_size,
             num_iters=num_iters,
-            optimizer=optimizer
+            optimizer=optimizer,
+            refine=refine
         )
         all_thetas = pose.reshape(n_frames, 24, 3)
         pointer = 0

@@ -59,7 +59,7 @@ class SMPLify3D():
         self.corr_index = config.amass_idx
 
     def __call__(self, init_pose, init_betas, init_cam_t, j3d, conf_3d=1.0, step_size=1e-2, num_iters=100,
-                 optimizer='adam'):
+                 optimizer='adam', refine=None):
         search_tree = None
         pen_distance = None
         filter_faces = None
@@ -84,9 +84,12 @@ class SMPLify3D():
                 filter_faces = FilterFaces(
                     faces_segm=faces_segm, faces_parents=faces_parents,
                     ign_part_pairs=None).to(device=self.device)
-
-        body_pose = init_pose[:, 3:].detach().clone()
-        global_orient = init_pose[:, :3].detach().clone()
+        if refine is None:
+            body_pose = init_pose[:, 3:].detach().clone()
+            global_orient = init_pose[:, :3].detach().clone()
+        else:
+            body_pose = refine[:, 3:].detach().clone()
+            global_orient = refine[:, :3].detach().clone()
         betas = init_betas.detach().clone()
 
         # use guess 3d to get the initial
@@ -103,10 +106,14 @@ class SMPLify3D():
         # Optimize only camera translation and body orientation
         body_pose.requires_grad = False
         betas.requires_grad = False
-        global_orient.requires_grad = True
-        camera_translation.requires_grad = True
 
-        camera_opt_params = [global_orient, camera_translation]
+        camera_translation.requires_grad = True
+        if refine is None:
+            global_orient.requires_grad = True
+            camera_opt_params = [global_orient, camera_translation]
+        else:
+            global_orient.requires_grad = False
+            camera_opt_params = [camera_translation]
         if optimizer == 'adam':
             cam_steps = 20
             camera_optimizer = torch.optim.Adam(camera_opt_params, lr=step_size, betas=(0.9, 0.999))
@@ -144,6 +151,8 @@ class SMPLify3D():
 
         for stage in range(2):
             try:
+                if stage == 0 and refine is not None:
+                    continue
                 if stage == 1:
                     if self.use_collision:
                         smpl_output = self.smpl(global_orient=global_orient,
