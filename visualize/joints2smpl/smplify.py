@@ -84,12 +84,8 @@ class SMPLify3D():
                 filter_faces = FilterFaces(
                     faces_segm=faces_segm, faces_parents=faces_parents,
                     ign_part_pairs=None).to(device=self.device)
-        if refine is None:
-            body_pose = init_pose[:, 3:].detach().clone()
-            global_orient = init_pose[:, :3].detach().clone()
-        else:
-            body_pose = refine[:, 3:].detach().clone()
-            global_orient = refine[:, :3].detach().clone()
+        body_pose = init_pose[:, 3:].detach().clone()
+        global_orient = init_pose[:, :3].detach().clone()
         betas = init_betas.detach().clone()
 
         # use guess 3d to get the initial
@@ -108,12 +104,8 @@ class SMPLify3D():
         betas.requires_grad = False
 
         camera_translation.requires_grad = True
-        if refine is None:
-            global_orient.requires_grad = True
-            camera_opt_params = [global_orient, camera_translation]
-        else:
-            global_orient.requires_grad = False
-            camera_opt_params = [camera_translation]
+        global_orient.requires_grad = True
+        camera_opt_params = [global_orient, camera_translation]
         if optimizer == 'adam':
             cam_steps = 20
             camera_optimizer = torch.optim.Adam(camera_opt_params, lr=step_size, betas=(0.9, 0.999))
@@ -155,8 +147,14 @@ class SMPLify3D():
                     continue
                 if stage == 1:
                     if self.use_collision:
-                        smpl_output = self.smpl(global_orient=global_orient,
-                                                body_pose=body_pose,
+                        if refine is not None:
+                            old_body_pose = refine[:, 3:].detach()
+                            old_global_orient = refine[:, :3].detach()
+                        else:
+                            old_body_pose = body_pose.detach()
+                            old_global_orient = global_orient.detach()
+                        smpl_output = self.smpl(global_orient=old_global_orient,
+                                                body_pose=old_body_pose,
                                                 betas=betas)
                         model_vertices = smpl_output.vertices
                         triangles = torch.index_select(

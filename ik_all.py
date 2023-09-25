@@ -19,17 +19,18 @@ def worker(worker_id, n_workers):
     motions = sorted(os.listdir("database/"))
     random.seed(12321)
     random.shuffle(motions)
+    motions=["013049.npy"]
     j2s = Joints2SMPL(device=f"cuda:{worker_id % torch.cuda.device_count()}", use_collision=True)
     block_size = (len(motions) + n_workers - 1) // n_workers
     start = worker_id * block_size
     end = start + block_size
     motions = motions[start:end]
-    os.makedirs("motion_database3/", exist_ok=True)
+    os.makedirs("motion_database4/", exist_ok=True)
     batch = []
     for motion_file in tqdm(motions):
-        if os.path.exists(f"motion_database3/{motion_file.replace('.npy', '.json')}"):
+        if os.path.exists(f"motion_database4/{motion_file.replace('.npy', '.json')}"):
             try:
-                with open(f"motion_database3/{motion_file.replace('.npy', '.json')}") as f:
+                with open(f"motion_database4/{motion_file.replace('.npy', '.json')}") as f:
                     json.load(f)["fps"]
                 continue
             except:
@@ -54,7 +55,7 @@ def worker(worker_id, n_workers):
         try:
             all_rotations, all_root_pos = j2s([x[1] for x in batch], step_size=2e-2, num_iters=30, optimizer="lbfgs",refine=[x[2] for x in batch])
             for rotations, root_pos, file in zip(all_rotations, all_root_pos, [x[0] for x in batch]):
-                with open(f"motion_database3/{file.replace('.npy', '.json')}", "w") as f:
+                with open(f"motion_database4/{file.replace('.npy', '.json')}", "w") as f:
                     json.dump({"root_positions": binascii.b2a_base64(
                         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
                                "rotations": binascii.b2a_base64(
