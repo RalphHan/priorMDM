@@ -97,4 +97,4 @@ async def angle(prompt: str, do_translation: bool = False, want_number: int = 1,
     if do_translation:
         prompt = translation(prompt)
     priors = await search(prompt, want_number, uid)
-    return {"clips": priors}
+    return priors
