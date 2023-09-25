@@ -28,7 +28,7 @@ def translation(prompt):
                                   "Zombie Biting --> A person is zombie biting.\n"
                                   "A girl is dancing --> A girl is dancing.\n"
                                   "一个男人在画画 --> A man is drawing.\n"
-                                  "游泳 --> A person is swimming.\n"
+                                  "游泳 --> A person is swimming.\n\n"
                        },
                       {"role": "user", "content": prompt}],
             timeout=10,
