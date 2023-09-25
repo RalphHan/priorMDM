@@ -183,7 +183,7 @@ def body_fitting_loss_3d(body_pose, preserve_pose,
     # print('collision_loss', collision_loss)
     # print('pose_preserve_loss', pose_preserve_loss.shape)
 
-    total_loss = joint3d_loss + pose_prior_loss + angle_prior_loss + shape_prior_loss + collision_loss + pose_preserve_loss
+    total_loss = joint3d_loss + pose_prior_loss + angle_prior_loss + shape_prior_loss + 0.5*collision_loss + pose_preserve_loss
 
     return total_loss.sum()
 
