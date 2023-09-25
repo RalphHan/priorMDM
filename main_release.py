@@ -24,7 +24,12 @@ def translation(prompt):
             model="gpt-3.5-turbo",
             messages=[{"role": "system",
                        "content": "translate to english without any explanation. If it's already in english, just repeat it. "
-                                  "If get a <motion> without a subject, transfer it to: 'A person is <motion>'"},
+                                  "If get a <motion> without a subject, transfer it to: 'A person is <motion>'. e.g.:\n"
+                                  "Zombie Biting --> A person is zombie biting.\n"
+                                  "A girl is dancing --> A girl is dancing.\n"
+                                  "一个男人在画画 --> A man is drawing.\n"
+                                  "游泳 --> A person is swimming.\n"
+                       },
                       {"role": "user", "content": prompt}],
             timeout=10,
         )["choices"][0]["message"]["content"]
