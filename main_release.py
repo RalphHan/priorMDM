@@ -5,7 +5,7 @@ import openai, os
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import aiohttp
@@ -43,12 +43,12 @@ async def fetch(session, **kwargs):
         return
 
 
-async def search(prompt, want_number=1):
+async def search(prompt, want_number=1, uid=None):
     async with aiohttp.ClientSession() as session:
         t2t_request = fetch(session, url=os.getenv("T2T_SERVER") + "/result/",
-                            params={"query": prompt, "fs_weight": 0.1, "max_num": want_number * 4 * 4})
+                            params={"query": prompt, "fs_weight": 0.1, "max_num": want_number * 4 * 4, "uid": uid})
         t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
-                            params={"query": prompt, "max_num": want_number * 4})
+                            params={"query": prompt, "max_num": want_number * 4, "uid": uid})
         _weights = [6.0, 1.0]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
         weights = []
@@ -89,10 +89,10 @@ async def search(prompt, want_number=1):
 
 
 @app.get("/angle/")
-async def angle(prompt: str, do_translation: bool = False, want_number: int = 1):
+async def angle(prompt: str, do_translation: bool = False, want_number: int = 1, uid: str = Query(None)):
     assert 1 <= want_number <= 20
     prompt = prompt[:100]
     if do_translation:
         prompt = translation(prompt)
-    priors = await search(prompt, want_number)
+    priors = await search(prompt, want_number, uid)
     return {"clips": priors}
