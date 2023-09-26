@@ -1,1 +1,0 @@
-from .my_smpl import MySMPL
