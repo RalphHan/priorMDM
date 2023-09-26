@@ -138,8 +138,8 @@ class SMPLify3D():
         camera_translation.requires_grad = True
 
         # --- if we use the sequence, fix the shape
-        # betas.requires_grad = True
-        body_opt_params = [body_pose, global_orient, camera_translation]
+        betas.requires_grad = True
+        body_opt_params = [body_pose, betas, global_orient, camera_translation]
         refine_assert = True
         for stage in range(2):
             try:
