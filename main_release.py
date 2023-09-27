@@ -92,8 +92,15 @@ async def search(prompt, is_dance, want_number=1, uid=None):
     want_ids = want_ids[:want_number]
     motions = []
     for want_id in want_ids:
-        with open(f"motion_database/{want_id}.json") as f:
-            motions.append(json.load(f))
+        try:
+            with open(f"motion_database/{want_id}.json") as f:
+                motion = json.load(f)
+                motions.append(motion)
+        except:
+            pass
+    assert motions
+    while len(motions) < want_number:
+        motions.append(motions[0])
     return motions
 
 
