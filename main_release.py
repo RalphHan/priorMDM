@@ -48,13 +48,15 @@ async def fetch(session, **kwargs):
         return
 
 
-async def search(prompt, want_number=1, uid=None):
+async def search(prompt, is_dance, want_number=1, uid=None):
     async with aiohttp.ClientSession() as session:
         t2t_request = fetch(session, url=os.getenv("T2T_SERVER") + "/result/",
-                            params={"query": prompt, "fs_weight": 0.1, "max_num": want_number * 4 * 4,
+                            params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}), "fs_weight": 0.1,
+                                    "max_num": want_number * 4 * 4,
                                     **({"uid": uid} if uid is not None else {})})
         t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
-                            params={"query": prompt, "max_num": want_number * 4,
+                            params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
+                                    "max_num": want_number * 4,
                                     **({"uid": uid} if uid is not None else {})})
         _weights = [6.0, 1.0]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
@@ -96,10 +98,11 @@ async def search(prompt, want_number=1, uid=None):
 
 
 @app.get("/angle/")
-async def angle(prompt: str, do_translation: bool = False, want_number: int = 1, uid: str = Query(None)):
+async def angle(prompt: str, do_translation: bool = False, is_dance: bool = False, want_number: int = 1,
+                uid: str = Query(None)):
     assert 1 <= want_number <= 20
     prompt = prompt[:100]
     if do_translation:
         prompt = translation(prompt)
-    priors = await search(prompt, want_number, uid)
+    priors = await search(prompt, is_dance, want_number, uid)
     return priors
