@@ -95,6 +95,7 @@ async def search(prompt, is_dance, want_number=1, uid=None):
         try:
             with open(f"motion_database/{want_id}.json") as f:
                 motion = json.load(f)
+                motion["mid"] = want_id
                 motions.append(motion)
         except:
             pass
