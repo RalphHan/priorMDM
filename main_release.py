@@ -51,13 +51,14 @@ async def fetch(session, **kwargs):
 
 async def search(prompt, is_dance, is_random, want_number=1, uid=None):
     async with aiohttp.ClientSession() as session:
+        scale = 8 if not is_dance else 20
         t2t_request = fetch(session, url=os.getenv("T2T_SERVER") + "/result/",
                             params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}), "fs_weight": 0.1,
-                                    "max_num": want_number * 2 * 8,
+                                    "max_num": want_number * 2 * scale,
                                     **({"uid": uid} if uid is not None else {})})
         t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
                             params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
-                                    "max_num": want_number * 8,
+                                    "max_num": want_number * scale,
                                     **({"uid": uid} if uid is not None else {})})
         _weights = [6.0, 1.0] if not is_dance else [1.0, 1.0]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
@@ -88,10 +89,10 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
     motion_ids = [x[0] for x in final_rank]
     assert motion_ids
     want_ids = []
-    while len(want_ids) < want_number * 4:
+    while len(want_ids) < want_number * scale // 2:
         want_ids.extend(motion_ids)
     if is_random:
-        want_ids = random.sample(want_ids[:want_number * 4], want_number)
+        want_ids = random.sample(want_ids[:want_number * scale // 2], want_number)
     else:
         want_ids = want_ids[:want_number]
     motions = []
