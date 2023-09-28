@@ -12,6 +12,7 @@ import aiohttp
 import asyncio
 from collections import defaultdict
 from ordered_set import OrderedSet
+import random
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"],
@@ -48,15 +49,15 @@ async def fetch(session, **kwargs):
         return
 
 
-async def search(prompt, is_dance, want_number=1, uid=None):
+async def search(prompt, is_dance, is_random, want_number=1, uid=None):
     async with aiohttp.ClientSession() as session:
         t2t_request = fetch(session, url=os.getenv("T2T_SERVER") + "/result/",
                             params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}), "fs_weight": 0.1,
-                                    "max_num": want_number * 4 * 4,
+                                    "max_num": want_number * 2 * 8,
                                     **({"uid": uid} if uid is not None else {})})
         t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
                             params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
-                                    "max_num": want_number * 4,
+                                    "max_num": want_number * 8,
                                     **({"uid": uid} if uid is not None else {})})
         _weights = [6.0, 1.0]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
@@ -87,9 +88,12 @@ async def search(prompt, is_dance, want_number=1, uid=None):
     motion_ids = [x[0] for x in final_rank]
     assert motion_ids
     want_ids = []
-    while len(want_ids) < want_number:
+    while len(want_ids) < want_number * 4:
         want_ids.extend(motion_ids)
-    want_ids = want_ids[:want_number]
+    if is_random:
+        want_ids = random.sample(want_ids[:want_number * 4], want_number)
+    else:
+        want_ids = want_ids[:want_number]
     motions = []
     for want_id in want_ids:
         try:
@@ -106,11 +110,12 @@ async def search(prompt, is_dance, want_number=1, uid=None):
 
 
 @app.get("/angle/")
-async def angle(prompt: str, do_translation: bool = False, is_dance: bool = False, want_number: int = 1,
+async def angle(prompt: str, do_translation: bool = False, is_dance: bool = False, is_random: bool = False,
+                want_number: int = 1,
                 uid: str = Query(None)):
     assert 1 <= want_number <= 20
     prompt = prompt[:100]
     if do_translation:
         prompt = translation(prompt)
-    priors = await search(prompt, is_dance, want_number, uid)
+    priors = await search(prompt, is_dance, is_random, want_number, uid)
     return priors
