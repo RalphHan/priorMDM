@@ -111,11 +111,13 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
 
 
 @app.get("/angle/")
-async def angle(prompt: str, do_translation: bool = False, is_dance: bool = False, is_random: bool = False,
+async def angle(prompt: str, do_translation: bool = False, regenerate: int = 0, style: str = Query(None),
                 want_number: int = 1,
                 uid: str = Query(None)):
     assert 1 <= want_number <= 20
     prompt = prompt[:100]
+    is_dance = style is not None and style.lower() == "dance"
+    is_random = bool(regenerate)
     if do_translation:
         prompt = translation(prompt)
     priors = await search(prompt, is_dance, is_random, want_number, uid)
