@@ -39,12 +39,14 @@ def translation(prompt):
     return prompt
 
 
-async def fetch(session, **kwargs):
+async def fetch(**kwargs):
     try:
-        async with session.get(**kwargs) as response:
-            data = await response.json()
-            assert response.status == 200
-        return OrderedSet([x["motion_id"].split('.')[0] for x in data])
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(**kwargs) as response:
+                data = await response.json()
+                assert response.status == 200
+                return OrderedSet([x["motion_id"].split('.')[0] for x in data])
     except:
         return
 
@@ -57,25 +59,24 @@ def get_tag(motion_id):
 
 
 async def search(prompt, is_dance, is_random, want_number=1, uid=None):
-    async with aiohttp.ClientSession() as session:
-        scale = 8 if not is_dance else 20
-        t2t_request = fetch(session, url=os.getenv("T2T_SERVER") + "/result/",
-                            params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}), "fs_weight": 0.1,
-                                    "max_num": want_number * 2 * scale,
-                                    **({"uid": uid} if uid is not None else {})})
-        t2m_request = fetch(session, url=os.getenv("T2M_SERVER") + "/result/",
-                            params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
-                                    "max_num": want_number * scale,
-                                    **({"uid": uid} if uid is not None else {})})
-        _weights = [{"mocap": 2.0, "aist": 1.0, "else": 6.0}, {"else": 1.0}]
-        _ranks = await asyncio.gather(*[t2t_request, t2m_request])
-        weights = []
-        ranks = []
-        for rank, weight in zip(_ranks, _weights):
-            if rank is not None:
-                weights.append(weight)
-                ranks.append(rank)
-        assert ranks
+    scale = 8 if not is_dance else 20
+    t2t_request = fetch(url=os.getenv("T2T_SERVER") + "/result/",
+                        params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}), "fs_weight": 0.1,
+                                "max_num": want_number * 2 * scale,
+                                **({"uid": uid} if uid is not None else {})})
+    t2m_request = fetch(url=os.getenv("T2M_SERVER") + "/result/",
+                        params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
+                                "max_num": want_number * scale,
+                                **({"uid": uid} if uid is not None else {})})
+    _weights = [{"mocap": 2.0, "aist": 1.0, "else": 6.0}, {"else": 1.0}]
+    _ranks = await asyncio.gather(*[t2t_request, t2m_request])
+    weights = []
+    ranks = []
+    for rank, weight in zip(_ranks, _weights):
+        if rank is not None:
+            weights.append(weight)
+            ranks.append(rank)
+    assert ranks
     min_length = min([len(rank) for rank in ranks])
     for i in range(len(ranks)):
         ranks[i] = ranks[i][:min_length]
