@@ -13,6 +13,7 @@ import asyncio
 from collections import defaultdict
 from ordered_set import OrderedSet
 import random
+import redis
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"],
@@ -102,9 +103,24 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
             total_rank[x] += rank.get(x, min_length) * weight.get(tag, weight["else"]) \
                              / sum_weight.get(tag, sum_weight["else"])
             min_rank[x] = min(min_rank[x], rank.get(x, min_length))
+    length_rank = None
+    try:
+        redis_conn = redis.Redis(host=os.getenv("REDIS_SEVER"), port=int(os.getenv("REDIS_PORT")),
+                                 password=os.getenv("REDIS_PASSWORD"))
+        list_total_id = list(total_id)
+        seconds = redis_conn.mget(["sec_" + x for x in list_total_id])
+        _length_rank = {}
+        for motion_id, second in zip(list_total_id, seconds):
+            _length_rank[motion_id] = float(second) if second is not None else 0.5
+        _length_rank = sorted(_length_rank.items(), key=lambda x: x[1], reverse=True)
+        length_rank = {length_rank[x[0]]: i for i, x in enumerate(_length_rank)}
+    except:
+        pass
     final_rank = {}
     for x in total_id:
         final_rank[x] = (total_rank[x] * 4 + min_rank[x]) / 5
+        if length_rank is not None:
+            final_rank[x] = (3 * final_rank[x] + length_rank[x]) / 4
     final_rank = sorted(final_rank.items(), key=lambda x: x[1])
     motion_ids = [x[0] for x in final_rank]
     assert motion_ids
