@@ -68,7 +68,7 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
                         params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
                                 "max_num": want_number * scale,
                                 **({"uid": uid} if uid is not None else {})})
-    _weights = [{"mocap": 4.0, "aist": 1.0, "else": 6.0}, {"else": 1.0}]
+    _weights = [{"aist": 1.0, "else": 6.0}, {"else": 1.0}]
     _ranks = await asyncio.gather(*[t2t_request, t2m_request])
     weights = []
     ranks = []
