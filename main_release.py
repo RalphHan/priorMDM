@@ -114,9 +114,9 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
             _length_rank[motion_id] = float(second) if second is not None else 0.5
         _length_rank = sorted(_length_rank.items(), key=lambda x: x[1], reverse=True)
         length_rank = {length_rank[x[0]]: i for i, x in enumerate(_length_rank)}
-    except:
+    except Exception as e:
+        print(e)
         pass
-    print(length_rank)
     final_rank = {}
     for x in total_id:
         final_rank[x] = (total_rank[x] * 4 + min_rank[x]) / 5
