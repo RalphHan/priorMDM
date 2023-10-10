@@ -116,6 +116,7 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
         length_rank = {length_rank[x[0]]: i for i, x in enumerate(_length_rank)}
     except:
         pass
+    print(length_rank)
     final_rank = {}
     for x in total_id:
         final_rank[x] = (total_rank[x] * 4 + min_rank[x]) / 5
