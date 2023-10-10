@@ -1,5 +1,6 @@
 if [ $# -eq 0 ]; then
     docker run -itd \
+      --name motion-search \
       --gpus '"device=0"' \
       -v `pwd`:/priorMDM \
       --restart always \
