@@ -109,6 +109,8 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
                                  password=os.getenv("REDIS_PASSWORD"))
         list_total_id = list(total_id)
         seconds = redis_conn.mget(["sec_" + x for x in list_total_id])
+        print(["sec_" + x for x in list_total_id])
+        print(seconds)
         _length_rank = {}
         for motion_id, second in zip(list_total_id, seconds):
             _length_rank[motion_id] = float(second) if second is not None else 0.5
