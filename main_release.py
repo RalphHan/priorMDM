@@ -49,6 +49,13 @@ async def fetch(session, **kwargs):
         return
 
 
+def get_tag(motion_id):
+    splitted = motion_id.split('_')
+    if len(splitted) == 1:
+        return "h3d"
+    return splitted[0]
+
+
 async def search(prompt, is_dance, is_random, want_number=1, uid=None):
     async with aiohttp.ClientSession() as session:
         scale = 8 if not is_dance else 20
@@ -60,7 +67,7 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
                             params={"query": prompt, **({} if not is_dance else {"tags": ["aist"]}),
                                     "max_num": want_number * scale,
                                     **({"uid": uid} if uid is not None else {})})
-        _weights = [6.0, 1.0] if not is_dance else [1.0, 1.0]
+        _weights = [{"mocap": 2.0, "aist": 1.0, "else": 6.0}, {"else": 1.0}]
         _ranks = await asyncio.gather(*[t2t_request, t2m_request])
         weights = []
         ranks = []
@@ -77,10 +84,22 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
     total_id = set()
     for rank in ranks:
         total_id |= rank
+    id2tag = {}
+    for x in total_id:
+        id2tag[x] = get_tag(x)
+    sum_weight = defaultdict(float)
+    all_tags = set()
+    for weight in weights:
+        all_tags |= weight.keys()
+    for tag in all_tags:
+        for weight in weights:
+            sum_weight[tag] += weight.get(tag, weight["else"])
     for rank, weight in zip(ranks, weights):
         rank = {x: i for i, x in enumerate(rank)}
         for x in total_id:
-            total_rank[x] += rank.get(x, min_length) * weight / sum(weights)
+            tag = id2tag[x]
+            total_rank[x] += rank.get(x, min_length) * weight.get(tag, weight["else"]) \
+                             / sum_weight.get(tag, sum_weight["else"])
             min_rank[x] = min(min_rank[x], rank.get(x, min_length))
     final_rank = {}
     for x in total_id:
