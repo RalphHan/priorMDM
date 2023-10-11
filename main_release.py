@@ -14,6 +14,7 @@ from collections import defaultdict
 from ordered_set import OrderedSet
 import random
 import redis
+import numpy as np
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"],
@@ -47,6 +48,10 @@ async def fetch(**kwargs):
             async with session.get(**kwargs) as response:
                 data = await response.json()
                 assert response.status == 200
+                noise = np.random.randn(len(data)) * 0.01
+                for i, x in enumerate(data):
+                    x["score"] += noise[i]
+                data = sorted(data, key=lambda x: x["score"], reverse=True)
                 return OrderedSet([x["motion_id"].split('.')[0] for x in data])
     except:
         return
@@ -109,9 +114,10 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
                                  password=os.getenv("REDIS_PASSWORD"))
         list_total_id = list(total_id)
         seconds = redis_conn.mget(["sec_" + x for x in list_total_id])
+        noise = np.random.randn(len(list_total_id)) * 0.01
         _length_rank = {}
-        for motion_id, second in zip(list_total_id, seconds):
-            _length_rank[motion_id] = float(second) if second is not None else 0.5
+        for i, motion_id, second in zip(range(len(list_total_id)), list_total_id, seconds):
+            _length_rank[motion_id] = (float(second) if second is not None else 0.5) + noise[i]
         _length_rank = sorted(_length_rank.items(), key=lambda x: x[1], reverse=True)
         length_rank = {x[0]: i for i, x in enumerate(_length_rank)}
     except:
