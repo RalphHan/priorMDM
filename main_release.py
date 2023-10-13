@@ -11,7 +11,6 @@ import json
 import aiohttp
 import asyncio
 from collections import defaultdict
-from ordered_set import OrderedSet
 import random
 import redis
 import numpy as np
@@ -48,11 +47,13 @@ async def fetch(**kwargs):
             async with session.get(**kwargs) as response:
                 data = await response.json()
                 assert response.status == 200
-                noise = np.random.randn(len(data)) * 0.01
-                for i, x in enumerate(data):
-                    x["score"] += noise[i]
-                data = sorted(data, key=lambda x: x["score"], reverse=True)
-                return OrderedSet([x["motion_id"].split('.')[0] for x in data])
+                exist = set()
+                ret = []
+                for x in data:
+                    if x["motion_id"] not in exist:
+                        ret.append((x["motion_id"], x["score"]))
+                        exist.add(x["motion_id"])
+                return ret
     except:
         return
 
@@ -62,6 +63,20 @@ def get_tag(motion_id):
     if len(splitted) == 1:
         return "h3d"
     return splitted[0]
+
+
+def rank_items(sorted_items):
+    rank = {}
+    prev_score = None
+    prev_rank = 0
+    for i, (name, score) in enumerate(sorted_items):
+        if score == prev_score:
+            rank[name] = prev_rank
+        else:
+            rank[name] = i
+            prev_rank = i
+        prev_score = score
+    return rank
 
 
 async def search(prompt, is_dance, is_random, want_number=1, uid=None):
@@ -86,11 +101,12 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
     min_length = min([len(rank) for rank in ranks])
     for i in range(len(ranks)):
         ranks[i] = ranks[i][:min_length]
+        ranks[i] = rank_items(ranks[i])
     total_rank = defaultdict(float)
     min_rank = defaultdict(lambda: min_length)
     total_id = set()
     for rank in ranks:
-        total_id |= rank
+        total_id |= rank.keys()
     id2tag = {}
     for x in total_id:
         id2tag[x] = get_tag(x)
@@ -102,7 +118,6 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
         for weight in weights:
             sum_weight[tag] += weight.get(tag, weight["else"])
     for rank, weight in zip(ranks, weights):
-        rank = {x: i for i, x in enumerate(rank)}
         for x in total_id:
             tag = id2tag[x]
             total_rank[x] += rank.get(x, min_length) * weight.get(tag, weight["else"]) \
@@ -114,19 +129,26 @@ async def search(prompt, is_dance, is_random, want_number=1, uid=None):
                                  password=os.getenv("REDIS_PASSWORD"))
         list_total_id = list(total_id)
         seconds = redis_conn.mget(["sec_" + x for x in list_total_id])
-        noise = np.random.randn(len(list_total_id)) * 0.01
-        _length_rank = {}
-        for i, motion_id, second in zip(range(len(list_total_id)), list_total_id, seconds):
-            _length_rank[motion_id] = (float(second) if second is not None else 0.5) + noise[i]
-        _length_rank = sorted(_length_rank.items(), key=lambda x: x[1], reverse=True)
-        length_rank = {x[0]: i for i, x in enumerate(_length_rank)}
+        _length_rank = []
+        for motion_id, second in zip(list_total_id, seconds):
+            _length_rank.append((motion_id, (float(second) if second is not None else 0.5)))
+        _length_rank = sorted(_length_rank, key=lambda x: x[1], reverse=True)
+        length_rank = rank_items(_length_rank)
     except:
         pass
-    final_rank = {}
-    for x in total_id:
-        final_rank[x] = (total_rank[x] * 4 + min_rank[x]) / 5
-        if length_rank is not None:
-            final_rank[x] = (3 * final_rank[x] + length_rank[x]) / 4
+    rank_colloctions = [total_rank, min_rank, length_rank]
+    weight_colloctions = [0.6, 0.15, 0.25]
+    final_rank = defaultdict(float)
+    final_weight = 0.0
+    for the_rank, the_weight in zip(rank_colloctions, weight_colloctions):
+        if the_rank is not None:
+            final_weight += the_weight
+            for x in total_id:
+                final_rank[x] += the_rank[x] * the_weight
+    assert final_weight > 0.0
+    noise = np.random.randn(len(final_rank)) * 0.01
+    for i, (k, v) in enumerate(list(final_rank.items())):
+        final_rank[k] = v / final_weight + noise[i]
     final_rank = sorted(final_rank.items(), key=lambda x: x[1])
     motion_ids = [x[0] for x in final_rank]
     assert motion_ids
