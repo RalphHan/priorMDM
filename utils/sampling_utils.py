@@ -13,9 +13,10 @@ def unfold_sample_arb_len(sample, handshake_size, step_sizes, final_n_frames, mo
     for sample_i, len_i in enumerate(step_sizes):
         if sample_i == 0:
             continue
-        start = step_sizes[sample_i-1]
+        start = step_sizes[sample_i - 1]
         sample[0, :, :, start:len_i] = old_sample[sample_i, :, :, handshake_size:model_kwargs['y']['lengths'][sample_i]]
     return sample
+
 
 def single_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mode=False, prior=None, do_refine=False):
     if prior is not None and not do_refine:
@@ -38,6 +39,7 @@ def single_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
     )
     return sample
 
+
 def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mode=False):
     # FIXME - not working for num_repetitions > 1
     debug = args.debug_double_take
@@ -50,7 +52,7 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
     batch_size = len(model_kwargs['y']['text'])
 
     transition = torch.zeros(n_frames)
-    transition[:args.handshake_size] = 1.  #[T0 T0 M1 M1 M1 M1 M1 M1 T1 T1] Motion sanwitch
+    transition[:args.handshake_size] = 1.  # [T0 T0 M1 M1 M1 M1 M1 M1 T1 T1] Motion sanwitch
     transition = torch.tile(transition.unsqueeze(0), dims=(batch_size, 1))
     transition[0, :args.handshake_size] = 0
     for ii in range(batch_size - 1):
@@ -82,29 +84,32 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
     if args.double_take:
         old_guidacnce_param = args.guidance_param
         args.guidance_param = 0.  # Force unconditioned generation
-        model_kwargs['y']['scale'] = torch.ones(batch_size-1, device=dist_util.dev()) * args.guidance_param
+        model_kwargs['y']['scale'] = torch.ones(batch_size - 1, device=dist_util.dev()) * args.guidance_param
 
         new_sample_seq_len = (sample.shape[-1] - 2 * handshake_size) * 2 + handshake_size
 
         bs, feats, joints, seq_len = sample.shape
-        new_sample = torch.zeros((bs-1, feats, joints, new_sample_seq_len), dtype=sample.dtype, device=sample.device)
+        new_sample = torch.zeros((bs - 1, feats, joints, new_sample_seq_len), dtype=sample.dtype, device=sample.device)
 
         generated_motion = []
         right_constraint = []
         left_constraint = []
 
         for ii in range(bs):
-            generated_motion.append(deepcopy(sample[ii, :, :, handshake_size: model_kwargs['y']['lengths'][ii]-handshake_size])) # w/o start and end
+            generated_motion.append(deepcopy(sample[ii, :, :, handshake_size: model_kwargs['y']['lengths'][
+                                                                                  ii] - handshake_size]))  # w/o start and end
             left_constraint.append(deepcopy(sample[ii, :, :, :handshake_size]))  # left side
-            right_constraint.append(deepcopy(sample[ii, :, :, model_kwargs['y']['lengths'][ii] - handshake_size: model_kwargs['y']['lengths'][ii]]))
+            right_constraint.append(deepcopy(
+                sample[ii, :, :, model_kwargs['y']['lengths'][ii] - handshake_size: model_kwargs['y']['lengths'][ii]]))
 
         buffer = []
         for ii in range(bs):
-            buffer.append(int(model_kwargs['y']['lengths'][ii]) - 2*handshake_size)
+            buffer.append(int(model_kwargs['y']['lengths'][ii]) - 2 * handshake_size)
         for ii in range(bs - 1):  # run over bs
             new_sample[ii, :, :, :buffer[ii]] = generated_motion[ii]
-            new_sample[ii, :, :, buffer[ii]: buffer[ii]+handshake_size] = right_constraint[ii] # add transition
-            new_sample[ii, :, :, buffer[ii]+handshake_size : buffer[ii]+handshake_size+buffer[ii+1]] = generated_motion[ii + 1]
+            new_sample[ii, :, :, buffer[ii]: buffer[ii] + handshake_size] = right_constraint[ii]  # add transition
+            new_sample[ii, :, :, buffer[ii] + handshake_size: buffer[ii] + handshake_size + buffer[ii + 1]] = \
+                generated_motion[ii + 1]
 
         # "in between"
         model_kwargs['y']['inpainted_motion'] = new_sample
@@ -112,40 +117,43 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
                                                                device=new_sample.device)
 
         for ii in range(bs - 1):  # run over bs
-            model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii]: buffer[ii]+handshake_size] = 0.3
+            model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii]: buffer[ii] + handshake_size] = 0.3
             if blend_len >= 2:
                 model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii] - blend_len: buffer[ii]] = \
-                    torch.arange(0.85, 0.0, -0.85 / int(blend_len))
-                model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii] + handshake_size: buffer[ii] + handshake_size + blend_len] = \
-                    torch.arange(0.0, 0.85, 0.85 / int(blend_len))
+                    torch.linspace(0.85, 0.3, int(blend_len))
+                model_kwargs['y']['inpainting_mask'][ii, :, :,
+                            buffer[ii] + handshake_size: buffer[ii] + handshake_size + blend_len] = \
+                    torch.linspace(0.3, 0.85, int(blend_len))
 
         transition_orig = deepcopy(model_kwargs['y']['is_transition'])
         transition = torch.zeros(new_sample_seq_len)
-        transition = torch.tile(transition.unsqueeze(0), dims=(bs-1, 1))
+        transition = torch.tile(transition.unsqueeze(0), dims=(bs - 1, 1))
         model_kwargs['y']['is_transition'] = transition
         model_kwargs['y']['uncond'] = 1.0
-        model_kwargs['y']['text'] = all_text[:bs-1]
+        model_kwargs['y']['text'] = all_text[:bs - 1]
         sample_fn = diffusion.p_sample_loop  # double take sample function
         n_frames = new_sample_seq_len
         orig_lens = deepcopy(model_kwargs['y']['lengths'])
-        for ii in range (len(model_kwargs['y']['lengths'])-1):
-            model_kwargs['y']['lengths'][ii] = model_kwargs['y']['lengths'][ii] + model_kwargs['y']['lengths'][ii+1] - 3*handshake_size
+        for ii in range(len(model_kwargs['y']['lengths']) - 1):
+            model_kwargs['y']['lengths'][ii] = model_kwargs['y']['lengths'][ii] + model_kwargs['y']['lengths'][
+                ii + 1] - 3 * handshake_size
         model_kwargs['y']['lengths'] = model_kwargs['y']['lengths'][:-1]
 
         double_take_sample = sample_fn(
             model,
-            (batch_size-1, model.njoints, model.nfeats, n_frames),
+            (batch_size - 1, model.njoints, model.nfeats, n_frames),
             clip_denoised=False,
             model_kwargs=model_kwargs,
-            skip_timesteps=args.skip_steps_double_take if not debug else 998,  # 0 is the default value - i.e. don't skip any step
-            init_image= new_sample, #TODO!! check if plausible or not!
+            skip_timesteps=args.skip_steps_double_take if not debug else 998,
+            # 0 is the default value - i.e. don't skip any step
+            init_image=new_sample,  # TODO!! check if plausible or not!
             progress=not eval_mode,
             dump_steps=None,
             noise=None,
             const_noise=False,
             repaint_samples=1,
             unfolding_handshake=0,
-            arb_len = False
+            arb_len=False
         )
         model_kwargs['y']['lengths'] = orig_lens
         # rebuild_orig:
@@ -153,23 +161,25 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
 
         transitions, right_side, left_side = [], [], []
         for ii in range(bs - 1):  # run over bs
-            transitions.append(double_take_sample[ii, :, :, buffer[ii]: buffer[ii]+handshake_size])
-            right_side.append(double_take_sample[ii, :, :, buffer[ii] + handshake_size: buffer[ii] + handshake_size + blend_len]) # M1 blending..
-            left_side.append(double_take_sample[ii, :, :, buffer[ii] - blend_len:buffer[ii]]) # M0 blending...
+            transitions.append(double_take_sample[ii, :, :, buffer[ii]: buffer[ii] + handshake_size])
+            right_side.append(double_take_sample[ii, :, :,
+                              buffer[ii] + handshake_size: buffer[ii] + handshake_size + blend_len])  # M1 blending..
+            left_side.append(double_take_sample[ii, :, :, buffer[ii] - blend_len:buffer[ii]])  # M0 blending...
 
-
-        rebuild_sample[0, :, :, :handshake_size] = left_constraint[0] # Fill missing
-        rebuild_sample[-1, :, :, buffer[-1]+handshake_size: buffer[-1]+2*handshake_size] = right_constraint[-1] # Fill missing
+        rebuild_sample[0, :, :, :handshake_size] = left_constraint[0]  # Fill missing
+        rebuild_sample[-1, :, :, buffer[-1] + handshake_size: buffer[-1] + 2 * handshake_size] = right_constraint[
+            -1]  # Fill missing
 
         for ii in range(bs - 1):
             rebuild_sample[ii + 1, :, :, :handshake_size] = transitions[ii]
-            rebuild_sample[ii, :, :, handshake_size: buffer[ii]+handshake_size] = generated_motion[ii]
-            rebuild_sample[ii, :, :, buffer[ii]+handshake_size: buffer[ii]+2*handshake_size] = transitions[ii]
-            rebuild_sample[ii, :, :, handshake_size + buffer[ii]-blend_len: handshake_size + buffer[ii]] = left_side[ii]
+            rebuild_sample[ii, :, :, handshake_size: buffer[ii] + handshake_size] = generated_motion[ii]
+            rebuild_sample[ii, :, :, buffer[ii] + handshake_size: buffer[ii] + 2 * handshake_size] = transitions[ii]
+            rebuild_sample[ii, :, :, handshake_size + buffer[ii] - blend_len: handshake_size + buffer[ii]] = left_side[
+                ii]
             # if ii > 0:
         rebuild_sample[-1, :, :, handshake_size: buffer[-1] + handshake_size] = generated_motion[-1]
         for ii in range(bs - 1):
-            rebuild_sample[ii+1, :, :, handshake_size:handshake_size + blend_len] = right_side[ii]
+            rebuild_sample[ii + 1, :, :, handshake_size:handshake_size + blend_len] = right_side[ii]
 
         double_take_sample = deepcopy(rebuild_sample)
         samples_per_rep_list.append(double_take_sample)
@@ -178,7 +188,6 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
         args.guidance_param = old_guidacnce_param
         model_kwargs['y']['scale'] = torch.ones(batch_size, device=dist_util.dev()) * args.guidance_param
 
-
         model_kwargs['y'].pop('inpainted_motion')
         model_kwargs['y'].pop('inpainting_mask')
         model_kwargs['y'].pop('uncond')
@@ -186,4 +195,3 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
         model_kwargs['y']['text'] = all_text
 
     return samples_per_rep_list, samples_type
-
