@@ -219,7 +219,7 @@ def prompt2video(prompt, prompt2, args, model, diffusion, data):
 
 args, model, diffusion, data = init()
 demo = gr.Interface(
-    lambda prompt, prompt2: prompt2video(prompt, prompt, args, model, diffusion, data),
+    lambda prompt, prompt2: prompt2video(prompt, prompt2, args, model, diffusion, data),
     [gr.Textbox("A person is swimming"), gr.Textbox("A person sits while crossing legs")],
     [gr.Video(format="mp4", autoplay=True)],
 )
