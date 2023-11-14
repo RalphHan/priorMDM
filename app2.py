@@ -77,7 +77,7 @@ def prompt2video(prompt,args, model, diffusion, data):
     model_kwargs = {'y': {
         'mask': torch.ones((2, 1, 1, 196)), #196 is humanml max frames number
         'lengths': torch.tensor([args.n_frames,95]),
-        'text': [prompt,"A person makes a long leap forward"],
+        'text': ["A person is swimming", prompt],
         'tokens': [''],
         'scale': torch.ones(2)*2.5
     }}
