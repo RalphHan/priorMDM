@@ -112,7 +112,7 @@ def double_take_arb_len(args, diffusion, model, model_kwargs, n_frames, eval_mod
                                                                device=new_sample.device)
 
         for ii in range(bs - 1):  # run over bs
-            # model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii]: buffer[ii]+handshake_size] = 0.3
+            model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii]: buffer[ii]+handshake_size] = 0.3
             if blend_len >= 2:
                 model_kwargs['y']['inpainting_mask'][ii, :, :, buffer[ii] - blend_len: buffer[ii]] = \
                     torch.arange(0.85, 0.0, -0.85 / int(blend_len))
