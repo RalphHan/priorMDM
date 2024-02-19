@@ -164,6 +164,7 @@ class SMPLify3D():
                                             search_tree=search_tree, pen_distance=pen_distance,
                                             filter_faces=filter_faces)
                 loss.backward()
+                body_pose.grad[:, 12 * 3:14 * 3] = 0.0
                 return loss
 
             body_optimizer.step(closure)
