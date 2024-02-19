@@ -12,9 +12,7 @@ class Joints2SMPL:
 
     def __init__(self, device, use_collision=False):
         self.device = torch.device(device)
-        self.num_joints = 22
         self.joint_category = "AMASS"
-        self.fix_foot = False
         self.use_collision = use_collision
         if self.use_collision:
             from smplx import SMPL
@@ -41,22 +39,15 @@ class Joints2SMPL:
             self.device)
         pred_cam_t = torch.Tensor([0.0, 0.0, 0.0]).unsqueeze(0).to(self.device)
         keypoints_3d = input_joints.to(self.device).float()
-        confidence_input = torch.ones(self.num_joints)
         if refine is not None:
             refine = np.concatenate(refine, axis=0)
             refine = torch.from_numpy(refine).to(self.device).float()
-        if self.fix_foot:
-            confidence_input[7] = 1.5
-            confidence_input[8] = 1.5
-            confidence_input[10] = 1.5
-            confidence_input[11] = 1.5
 
         pose, _ = self.smplify(
             pred_pose.detach(),
             pred_betas.detach(),
             pred_cam_t.detach(),
             keypoints_3d.detach(),
-            conf_3d=confidence_input.to(self.device),
             step_size=step_size,
             num_iters=num_iters,
             optimizer=optimizer,

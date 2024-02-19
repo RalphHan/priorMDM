@@ -11,6 +11,7 @@ def gmof(x, sigma):
     sigma_squared = sigma ** 2
     return (sigma_squared * x_squared) / (sigma_squared + x_squared)
 
+
 # angle prior
 def angle_prior(pose):
     """
@@ -88,7 +89,7 @@ def body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_center,
 
 
 # --- get camera fitting loss -----
-def camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center, 
+def camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center,
                         joints_2d, joints_conf,
                         focal_length=5000, depth_loss_weight=100):
     """
@@ -123,19 +124,18 @@ def camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center,
     return total_loss.sum()
 
 
-
- # #####--- body fitiing loss -----
+# #####--- body fitiing loss -----
 def body_fitting_loss_3d(body_pose, preserve_pose,
                          betas, model_joints, camera_translation,
                          j3d, pose_prior,
                          joints3d_conf,
-                         sigma=100, pose_prior_weight=4.78*1.5,
+                         sigma=100, pose_prior_weight=4.78 * 1.5,
                          shape_prior_weight=5.0, angle_prior_weight=15.2,
                          joint_loss_weight=500.0,
                          pose_preserve_weight=0.0,
                          use_collision=False,
                          model_vertices=None, model_faces=None,
-                         search_tree=None,  pen_distance=None,  filter_faces=None,
+                         search_tree=None, pen_distance=None, filter_faces=None,
                          collision_loss_weight=1000
                          ):
     """
@@ -143,13 +143,13 @@ def body_fitting_loss_3d(body_pose, preserve_pose,
     """
     batch_size = body_pose.shape[0]
 
-    #joint3d_loss = (joint_loss_weight ** 2) * gmof((model_joints + camera_translation) - j3d, sigma).sum(dim=-1)
-    
+    # joint3d_loss = (joint_loss_weight ** 2) * gmof((model_joints + camera_translation) - j3d, sigma).sum(dim=-1)
+
     joint3d_error = gmof((model_joints + camera_translation) - j3d, sigma)
-    
+
     joint3d_loss_part = (joints3d_conf ** 2) * joint3d_error.sum(dim=-1)
     joint3d_loss = ((joint_loss_weight ** 2) * joint3d_loss_part).sum(dim=-1)
-    
+
     # Pose prior loss
     pose_prior_loss = (pose_prior_weight ** 2) * pose_prior(body_pose, betas)
     # Angle prior for knees and elbows
@@ -173,7 +173,7 @@ def body_fitting_loss_3d(body_pose, preserve_pose,
 
         if collision_idxs.ge(0).sum().item() > 0:
             collision_loss = torch.sum(collision_loss_weight * pen_distance(triangles, collision_idxs))
-    
+
     pose_preserve_loss = (pose_preserve_weight ** 2) * ((body_pose - preserve_pose) ** 2).sum(dim=-1)
 
     # print('joint3d_loss', joint3d_loss.shape)
@@ -210,7 +210,7 @@ def camera_fitting_loss_3d(model_joints, camera_t, camera_t_est,
                       model_joints[:, gt_joints_ind]) ** 2
 
     # Loss that penalizes deviation from depth estimate
-    depth_loss = (depth_loss_weight**2) *  (camera_t - camera_t_est)**2
+    depth_loss = (depth_loss_weight ** 2) * (camera_t - camera_t_est) ** 2
 
-    total_loss = j3d_error_loss +  depth_loss
+    total_loss = j3d_error_loss + depth_loss
     return total_loss.sum()
