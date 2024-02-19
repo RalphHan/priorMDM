@@ -20,7 +20,8 @@ def guess_init_3d(model_joints,
     """
     # get the indexed four
     gt_joints = ['RHip', 'LHip', 'RShoulder', 'LShoulder']
-    gt_joints_ind = joints_ind_category = [16, 12, 8, 4]
+    gt_joints_ind = [config.JOINT_MAP[joint] for joint in gt_joints]
+    joints_ind_category = [16, 12, 8, 4]
 
     sum_init_t = (j3d[:, joints_ind_category] - model_joints[:, gt_joints_ind]).sum(dim=1)
     init_t = sum_init_t / 4.0
