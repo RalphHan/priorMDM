@@ -52,7 +52,7 @@ def worker(worker_id, n_workers):
         try:
             all_rotations, all_root_pos = j2s([x[1] for x in batch], step_size=2e-2, num_iters=30, optimizer="lbfgs")
             for rotations, root_pos, file in zip(all_rotations, all_root_pos, [x[0] for x in batch]):
-                with open(f"motion_database4/{file.replace('.npy', '.json')}", "w") as f:
+                with open(f"skeletons_pose/{file.replace('.skeleton', '.json')}", "w") as f:
                     json.dump({"root_positions": binascii.b2a_base64(
                         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
                                "rotations": binascii.b2a_base64(
