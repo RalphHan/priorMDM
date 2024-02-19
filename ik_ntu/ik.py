@@ -8,7 +8,7 @@ import torch
 from .visualize import Joints2SMPL
 import os
 from tqdm import tqdm
-from data_loaders.humanml.common.quaternion import qbetween_np
+from data_loaders.humanml.common.quaternion import qbetween_np, qrot_np
 import sys
 import random
 from .txt2npy import _read_skeleton
@@ -62,8 +62,7 @@ def worker(worker_id, n_workers):
             target = np.float32([[0, 0, 1]])
             root_quat_init = qbetween_np(forward_init, target).astype(np.float32)
             root_quat_init = np.ones(joints.shape[:-1] + (4,), dtype=np.float32) * root_quat_init
-            joints = qrot_np(root_quat_init, joints)
-            print(joints.shape, joints.dtype)
+            joints = qrot_np(root_quat_init, joints).astype(np.float32)
         except:
             traceback.print_exc()
             with open("failed.txt", "a") as f:
