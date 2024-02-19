@@ -12,6 +12,7 @@ from data_loaders.humanml.common.quaternion import qbetween_np
 import sys
 import random
 from .txt2npy import _read_skeleton
+import traceback
 
 batch_size = 8
 
@@ -64,6 +65,7 @@ def worker(worker_id, n_workers):
             joints = qrot_np(root_quat_init, joints)
             print(joints.shape, joints.dtype)
         except:
+            traceback.print_exc()
             with open("failed.txt", "a") as f:
                 f.write(f"{motion_file}\n")
             continue
@@ -85,7 +87,6 @@ def worker(worker_id, n_workers):
                                "n_frames": rotations.shape[0],
                                "n_joints": 24}, f, indent=4)
         except:
-            import traceback
             traceback.print_exc()
             with open("failed.txt", "a") as f:
                 for x in batch:
