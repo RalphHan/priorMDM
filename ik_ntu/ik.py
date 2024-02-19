@@ -64,6 +64,8 @@ def worker(worker_id, n_workers):
                                "n_frames": rotations.shape[0],
                                "n_joints": 24}, f, indent=4)
         except:
+            import traceback
+            traceback.print_exc()
             with open("failed.txt", "a") as f:
                 for x in batch:
                     f.write(f"{x[0]}\n")
