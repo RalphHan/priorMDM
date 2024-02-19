@@ -31,12 +31,12 @@ def worker(worker_id, n_workers):
     motions = videos[worker_id * block_size:(worker_id + 1) * block_size]
 
     j2s = Joints2SMPL(device=f"cuda:{worker_id % torch.cuda.device_count()}")
-    os.makedirs("skeletons_pose", exist_ok=True)
+    os.makedirs("skeletons_pose2", exist_ok=True)
     batch = []
     for motion_file in tqdm(motions):
-        if os.path.exists(f"skeletons_pose/{motion_file.replace('.skeleton', '.json')}"):
+        if os.path.exists(f"skeletons_pose2/{motion_file.replace('.skeleton', '.json')}"):
             try:
-                with open(f"skeletons_pose/{motion_file.replace('.npy', '.json')}") as f:
+                with open(f"skeletons_pose2/{motion_file.replace('.npy', '.json')}") as f:
                     json.load(f)["fps"]
                 continue
             except:
@@ -74,7 +74,7 @@ def worker(worker_id, n_workers):
         try:
             all_rotations, all_root_pos = j2s([x[1] for x in batch], step_size=2e-2, num_iters=30, optimizer="lbfgs")
             for rotations, root_pos, file in zip(all_rotations, all_root_pos, [x[0] for x in batch]):
-                with open(f"skeletons_pose/{file.replace('.skeleton', '.json')}", "w") as f:
+                with open(f"skeletons_pose2/{file.replace('.skeleton', '.json')}", "w") as f:
                     json.dump({"root_positions": binascii.b2a_base64(
                         root_pos.flatten().astype(np.float32).tobytes()).decode("utf-8"),
                                "rotations": binascii.b2a_base64(
