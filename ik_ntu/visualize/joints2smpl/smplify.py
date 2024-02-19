@@ -158,7 +158,7 @@ class SMPLify3D():
                                             joints3d_conf=conf_3d,
                                             joint_loss_weight=600.0,
                                             pose_preserve_weight=pose_preserve_weight,
-                                            use_collision=stage == 1,
+                                            use_collision=False,
                                             model_vertices=model_vertice, model_faces=self.model_faces,
                                             search_tree=search_tree, pen_distance=pen_distance,
                                             filter_faces=filter_faces)
