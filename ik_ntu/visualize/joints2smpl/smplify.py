@@ -50,7 +50,7 @@ class SMPLify3D():
         if self.use_collision:
             self.part_segm_fn = config.Part_Seg_DIR
         self.smpl_index = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23]
-        self.corr_index = [1, 13, 17, 2, 14, 18, 15, 19, 21, 16, 20, 3, 4, 5, 9, 6, 10, 7, 11, 8, 12]
+        self.corr_index = [x - 1 for x in [1, 13, 17, 2, 14, 18, 15, 19, 21, 16, 20, 3, 4, 5, 9, 6, 10, 7, 11, 8, 12]]
 
     def __call__(self, init_pose, init_betas, init_cam_t, j3d, conf_3d=1.0, step_size=1e-2, num_iters=100,
                  optimizer='adam', refine=None):
