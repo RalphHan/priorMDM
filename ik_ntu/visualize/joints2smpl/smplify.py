@@ -133,74 +133,38 @@ class SMPLify3D():
         # --- if we use the sequence, fix the shape
         betas.requires_grad = True
         body_opt_params = [body_pose, betas, global_orient, camera_translation]
-        refine_assert = True
-        for stage in range(2):
-            try:
-                if stage == 0 and refine is not None:
-                    continue
-                if stage == 1:
-                    if self.use_collision:
-                        if refine is not None:
-                            old_body_pose = refine[:, 3:].detach()
-                            old_global_orient = refine[:, :3].detach()
-                        else:
-                            old_body_pose = body_pose.detach()
-                            old_global_orient = global_orient.detach()
-                        smpl_output = self.smpl(global_orient=old_global_orient,
-                                                body_pose=old_body_pose,
-                                                betas=betas)
-                        model_vertices = smpl_output.vertices
-                        triangles = torch.index_select(
-                            model_vertices, 1,
-                            self.model_faces).view(body_pose.shape[0], -1, 3, 3)
-                        with torch.no_grad():
-                            collision_idxs = search_tree(triangles)
-                        if filter_faces is not None:
-                            collision_idxs = filter_faces(collision_idxs)
-                        if collision_idxs.ge(0).sum().item() / body_pose.shape[0] < 500:
-                            if refine is not None:
-                                refine_assert = False
-                            continue
-                    else:
-                        continue
+        if optimizer == 'adam':
+            body_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
+            pose_preserve_weight = 0.0
+        elif optimizer == 'lbfgs':
+            body_optimizer = torch.optim.LBFGS(body_opt_params, max_iter=num_iters,
+                                               lr=step_size, line_search_fn='strong_wolfe')
+            pose_preserve_weight = 5.0
+        else:
+            raise NotImplementedError
 
-                if optimizer == 'adam':
-                    body_optimizer = torch.optim.Adam(body_opt_params, lr=step_size, betas=(0.9, 0.999))
-                    pose_preserve_weight = 0.0
-                elif optimizer == 'lbfgs':
-                    body_optimizer = torch.optim.LBFGS(body_opt_params, max_iter=num_iters,
-                                                       lr=step_size, line_search_fn='strong_wolfe')
-                    pose_preserve_weight = 5.0
-                else:
-                    raise NotImplementedError
+        for _ in range(num_iters):
+            def closure():
+                body_optimizer.zero_grad()
+                smpl_output = self.smpl(global_orient=global_orient,
+                                        body_pose=body_pose,
+                                        betas=betas)
+                model_joints = smpl_output.joints
+                model_vertice = smpl_output.vertices
 
-                for _ in range(num_iters):
-                    def closure():
-                        body_optimizer.zero_grad()
-                        smpl_output = self.smpl(global_orient=global_orient,
-                                                body_pose=body_pose,
-                                                betas=betas)
-                        model_joints = smpl_output.joints
-                        model_vertice = smpl_output.vertices
+                loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index],
+                                            camera_translation,
+                                            j3d[:, self.corr_index], self.pose_prior,
+                                            joints3d_conf=conf_3d,
+                                            joint_loss_weight=600.0,
+                                            pose_preserve_weight=pose_preserve_weight,
+                                            use_collision=stage == 1,
+                                            model_vertices=model_vertice, model_faces=self.model_faces,
+                                            search_tree=search_tree, pen_distance=pen_distance,
+                                            filter_faces=filter_faces)
+                loss.backward()
+                return loss
 
-                        loss = body_fitting_loss_3d(body_pose, preserve_pose, betas, model_joints[:, self.smpl_index],
-                                                    camera_translation,
-                                                    j3d[:, self.corr_index], self.pose_prior,
-                                                    joints3d_conf=conf_3d,
-                                                    joint_loss_weight=600.0,
-                                                    pose_preserve_weight=pose_preserve_weight,
-                                                    use_collision=stage == 1,
-                                                    model_vertices=model_vertice, model_faces=self.model_faces,
-                                                    search_tree=search_tree, pen_distance=pen_distance,
-                                                    filter_faces=filter_faces)
-                        loss.backward()
-                        return loss
-
-                    body_optimizer.step(closure)
-            except:
-                assert stage == 1
-                assert refine is None
-        assert refine_assert
+            body_optimizer.step(closure)
         pose = torch.cat([global_orient, body_pose], dim=-1)
-
         return pose.detach(), camera_translation.detach()
