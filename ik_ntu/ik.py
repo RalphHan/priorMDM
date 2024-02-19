@@ -41,7 +41,8 @@ def worker(worker_id, n_workers):
             except:
                 pass
         try:
-            joints = _read_skeleton(f"skeletons/{motion_file}")['skel_body0'].astype(np.float32)
+            joints = 1.4 * _read_skeleton(f"skeletons/{motion_file}")['skel_body0'].astype(np.float32)
+            joints[..., [0, 2]] -= joints[0, 0, [0, 2]]
         except:
             with open("failed.txt", "a") as f:
                 f.write(f"{motion_file}\n")
